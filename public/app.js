@@ -2,8 +2,8 @@ import { initialTour, searchFAQ, overviewBlocks, faqCategories, filterFAQCategor
 const $ = id => document.getElementById(id);
 const apiBase=location.hostname==='furuta-ideas.github.io'?'https://tourruncher.onrender.com':'';
 let accessToken='';
-function saved(key,fallback){try{return JSON.parse(sessionStorage.getItem(key)) || fallback;}catch{return fallback;}}
-function save(key,value){try{sessionStorage.setItem(key,JSON.stringify(value));}catch{}}
+function saved(key,fallback){try{return JSON.parse(localStorage.getItem(key)) || fallback;}catch{return fallback;}}
+function save(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{}}
 const recent=new RecentCache(10,saved('tour-recent-v1',[]));
 let rolesCache=saved('tour-roles-v1',null);
 const pending=new Map();
@@ -71,7 +71,7 @@ function positionTour(index) {
   const item=$('tour-list').children[index];if(item)$('tour-list').scrollTop=item.offsetTop-($('tour-list').clientHeight-item.offsetHeight)/2;
 }
 async function selectTour(index) {
-  let t=state.tours[index];if(!t || state.selected===index)return;const cached=recent.get(t.id);if(t.cached && cached)t=cached.tour;
+  let t=state.tours[index];if(!t || state.selected===index)return;let cached=recent.get(t.id);if(!cached?.overview)cached=null;if(t.cached && cached)t=cached.tour;recent.set(t.id,cached || {tour:t,overview:null});save('tour-recent-v1',recent.serialize());
   state.selected=index;const seq=++state.detailSequence;
   Array.from($('tour-list').children).forEach((b,i)=>b.setAttribute('aria-current',String(i===index)));
   $('tour-title').textContent=t.title;$('tour-badge').hidden=false;$('tour-badge').textContent=t.date===today()?'本日のツアー':t.date>today()?'今後のツアー':'過去のツアー';
@@ -81,8 +81,8 @@ async function selectTour(index) {
   const overview=el('div',null,'notion-content');const draw=nodes=>{overview.replaceChildren();if(nodes?.length)renderBlocks(nodes,overview);else overview.append(el('p','実施概要の記載はありません。','hint'));};if(cached)draw(cached.overview);else overview.append(el('p','実施概要を取得しています…','loading'));
   $('tour-properties').replaceChildren(dl);$('tour-detail').replaceChildren(overview);
   try{const data=await api('/api/tour/'+t.id+(cached?.version && Date.now()-(cached.savedAt || 0)<45*60*1000?'?version='+encodeURIComponent(cached.version):''));
-    if(data.notModified){recent.set(t.id,cached);save('tour-recent-v1',recent.serialize());return;}
-    const selected=data.overview || overviewBlocks(data.blocks || []);const updated={tour:data.tour || t,overview:selected,version:data.version,savedAt:Date.now()};recent.set(t.id,updated);save('tour-recent-v1',recent.serialize());
+    if(data.notModified){if(recent.entries.has(t.id)){recent.entries.set(t.id,cached);save('tour-recent-v1',recent.serialize());}return;}
+    const selected=data.overview || overviewBlocks(data.blocks || []);const updated={tour:data.tour || t,overview:selected,version:data.version,savedAt:Date.now()};if(recent.entries.has(t.id)){recent.entries.set(t.id,updated);save('tour-recent-v1',recent.serialize());}
     if(seq!==state.detailSequence)return;
     if(JSON.stringify(cached?.overview)!==JSON.stringify(selected))draw(selected);
     if(data.tour){const dl=el('dl',null,'properties');for(const [k,v] of orderedProperties(data.tour.properties)){const cell=el('div',null,'property');cell.title=k+'：'+v;cell.append(el('dt',k),el('dd',v));dl.append(cell);}$('tour-properties').replaceChildren(dl);}
@@ -123,7 +123,7 @@ async function loadPlaybook(){
     const faq=section(nodes,/ＦＡＱアプリ|FAQアプリ/);
     if(faq){const url=flatten(faq.children).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://'));if(url)$('faq-master').href=url.href;}
     $('faq-master').href||= 'https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/';
-  }catch(error){for(const id of ['roles','materials','troubles','contacts','menti-info'])errorAt($(id),error);}
+  }catch(error){for(const id of ['materials','troubles','contacts','menti-info'])errorAt($(id),error);}
 }
 function load(){ $('today').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(new Date());loadTours();loadPlaybook();loadCategories(); }
 $('roles-button').addEventListener('click',async()=>{const target=$('roles');if(rolesCache)displaySection(target,rolesCache);else target.replaceChildren(el('p','読み込み中…','loading'));$('roles-dialog').showModal();try{const data=await api('/api/roles');const latest=section(data.sections,/役割分担/);if(JSON.stringify(latest)!==JSON.stringify(rolesCache)){rolesCache=latest;save('tour-roles-v1',latest);displaySection(target,latest);}}catch(error){if(rolesCache)target.append(el('p','最新情報を確認できませんでした。キャッシュを表示中です。','hint'));else errorAt(target,error);}});$('roles-close').addEventListener('click',()=>$('roles-dialog').close());
