@@ -70,7 +70,7 @@ async function selectTour(index) {
   const dl=el('dl',null,'properties');
   for(const [k,v] of Object.entries(t.properties)){if(k==='案件' || !v)continue;const cell=el('div',null,'property');cell.append(el('dt',k),el('dd',v));dl.append(cell);}
   const overview=el('div',null,'notion-content');overview.append(el('p','実施概要を取得しています…','loading'));
-  $('tour-detail').replaceChildren(dl,el('h3','実施概要'),overview);
+  $('tour-properties').replaceChildren(dl);$('tour-detail').replaceChildren(overview);
   try{const blocks=(await api(`/api/tour/${t.id}`)).blocks;if(seq!==state.detailSequence)return;
     overview.replaceChildren();const selected=overviewBlocks(blocks);if(selected.length)renderBlocks(selected,overview);else overview.append(el('p','実施概要の記載はありません。詳細はNotionで確認してください。','hint'));
   }catch(error){if(seq===state.detailSequence)errorAt(overview,error);}
@@ -81,7 +81,7 @@ async function loadTours() {
   try{state.tours=(await api('/api/tours')).tours;state.selected=-1;state.detailCache.clear();$('tour-count').textContent=`${state.tours.length}件`;$('tour-list').replaceChildren();
     if(!state.tours.length){$('tour-list').append(el('p','日付付きのツアー案件はありません。','hint'));$('tour-detail').replaceChildren(el('p','ツアー一覧に案件を追加すると表示されます。','hint'));return;}
     state.tours.reverse();
-    state.tours.forEach((t,i)=>{const b=el('button',null,'tour-item');b.type='button';b.append(el('time',`${t.date.replaceAll('-','')}  ${t.properties['時間枠'] || ''}`),el('strong',t.title.replace(/^\s*\d{8}[\s_　-]*/,'')));b.addEventListener('click',()=>{positionTour(i);selectTour(i);});$('tour-list').append(b);});
+    state.tours.forEach((t,i)=>{const b=el('button',null,'tour-item');b.type='button';b.title=`${t.title} ${t.properties['時間枠'] || ''}`;b.setAttribute('aria-label',b.title);b.append(el('time',t.date.replaceAll('-','')),el('strong',t.title.replace(/^\s*\d{8}[\s_　-]*/,'')));b.addEventListener('click',()=>{positionTour(i);selectTour(i);});$('tour-list').append(b);});
     const ascending=[...state.tours].reverse();const index=state.tours.length-1-initialTour(ascending,today());requestAnimationFrame(()=>{positionTour(index);selectTour(index);});
   }catch(error){$('tour-count').textContent='取得できません';errorAt($('tour-list'),error);}
 }
@@ -96,16 +96,16 @@ function displaySection(target,node) {target.replaceChildren();if(node)renderBlo
 async function loadPlaybook(){
   try{
     const nodes=(await api('/api/playbook')).sections;
-    displaySection($('roles'),section(nodes,/役割分担/));displaySection($('materials'),section(nodes,/コンテンツ/));displaySection($('troubles'),section(nodes,/トラブル/));displaySection($('contacts'),section(nodes,/緊急連絡先/));
+    displaySection($('roles'),section(nodes,/役割分担/));displaySection($('materials'),section(nodes,/コンテンツ/));renderTroubles(section(nodes,/トラブル/));displaySection($('contacts'),section(nodes,/緊急連絡先/));
     const menti=section(nodes,/Mentimeter/i);$('menti-info').replaceChildren();
     if(menti){const texts=flatten(menti.children).map(n=>n.text).filter(Boolean);const all=texts.join('\n');const mail=all.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];const pwd=all.match(/(?:Pwd|Password|パスワード|PWD)\s*[：:]\s*([^\s]+)/i)?.[1];if(mail)$('menti-info').append(copyRow(`ID：${mail}`,mail));if(pwd)$('menti-info').append(copyRow(`パスワード：${pwd}`,pwd));
       if(!mail || !pwd)$('menti-info').append(el('p','ログイン情報を確認してください。','hint'));const d=el('details');d.append(el('summary','使い方'));renderBlocks(menti.children,d);$('menti-info').append(d);
       const u=flatten(menti.children).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://www.mentimeter.com'));if(u)$('menti-launch').href=u.href;
     }else $('menti-info').append(el('p','PlaybookにMentimeterの情報が見つかりません。','hint'));
-    const faq=section(nodes,/ＦＡＱアプリ|FAQアプリ/);$('faq-credentials').replaceChildren();
-    if(faq){const text=flatten(faq.children).map(n=>n.text).join('\n');const pwd=text.match(/パスワード\s*[：:]\s*(\S+)/)?.[1];if(pwd)$('faq-credentials').append(copyRow(`FAQパスワード：${pwd}`,pwd));const url=flatten(faq.children).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://'));if(url)$('faq-master').href=url.href;}
+    const faq=section(nodes,/ＦＡＱアプリ|FAQアプリ/);
+    if(faq){const url=flatten(faq.children).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://'));if(url)$('faq-master').href=url.href;}
     $('faq-master').href||= 'https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/';
-  }catch(error){for(const id of ['roles','materials','troubles','contacts','menti-info','faq-credentials'])errorAt($(id),error);}
+  }catch(error){for(const id of ['roles','materials','troubles','contacts','menti-info'])errorAt($(id),error);}
 }
 function load(){ $('today').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(new Date());loadTours();loadPlaybook();loadCategories(); }
 $('roles-button').addEventListener('click',async()=>{const target=$('roles');target.replaceChildren(el('p','最新の役割分担と事前準備をNotionから取得しています…','loading'));$('roles-dialog').showModal();try{const data=await api('/api/roles');displaySection(target,section(data.sections,/役割分担/));}catch(error){errorAt(target,error);}});$('roles-close').addEventListener('click',()=>$('roles-dialog').close());
@@ -127,3 +127,16 @@ $('faq-more').addEventListener('click',()=>{state.limit+=4;drawFAQ();});
 
 function renderCategories(){const target=$('faq-categories');target.replaceChildren();for(const c of faqCategories(state.faq)){const b=el('button',state.lang==='en'?c.en:c.name,'category-chip');b.type='button';b.setAttribute('aria-pressed',String(state.category===c.name));b.addEventListener('click',()=>{clearTimeout(faqTimer);state.category=c.name;$('faq-query').value='';renderCategories();faqSearch();});target.append(b);}}
 async function loadCategories(){try{const data=await api('/api/faq');state.faq=data.rows;renderCategories();}catch(error){errorAt($('faq-categories'),error);}}
+
+function renderTroubles(node){
+ const target=$('troubles');target.replaceChildren();if(!node){displaySection(target,null);return;}
+ const hasImage=n=>n.type==='image' || (n.children || []).some(hasImage);
+ const unwrap=ns=>ns.flatMap(n=>['synced_block','column_list','column'].includes(n.type)?unwrap(n.children || []):[n]);
+ const nodes=unwrap(node.children || []);let card=null;let grid=null;
+ for(const n of nodes){
+  if(hasImage(n)){if(!grid){grid=el('div',null,'trouble-guides');target.append(grid);}card=el('article',null,'trouble-guide');grid.append(card);renderBlocks([n],card);}
+  else if(grid && n.type!=='table'){renderBlocks([n],card);}
+  else{renderBlocks([n],target);}
+ }
+ if(grid){const gap=(3-grid.children.length%3)%3;for(let i=0;i<gap;i++){const reserve=el('div',null,'trouble-reserve');reserve.setAttribute('aria-hidden','true');grid.append(reserve);}}
+}
