@@ -68,7 +68,7 @@ async function selectTour(index) {
   $('tour-title').textContent=t.title;$('tour-badge').hidden=false;$('tour-badge').textContent=t.date===today()?'本日のツアー':t.date>today()?'今後のツアー':'過去のツアー';
   $('tour-link').href=t.url;$('tour-link').hidden=false;
   const dl=el('dl',null,'properties');
-  for(const [k,v] of Object.entries(t.properties)){if(k==='案件' || !v)continue;const cell=el('div',null,'property');cell.append(el('dt',k),el('dd',v));dl.append(cell);}
+  for(const [k,v] of Object.entries(t.properties)){if(k==='案件' || !v)continue;const cell=el('div',null,'property');cell.title=`${k}：${v}`;cell.append(el('dt',k),el('dd',v));dl.append(cell);}
   const overview=el('div',null,'notion-content');overview.append(el('p','実施概要を取得しています…','loading'));
   $('tour-properties').replaceChildren(dl);$('tour-detail').replaceChildren(overview);
   try{const blocks=(await api(`/api/tour/${t.id}`)).blocks;if(seq!==state.detailSequence)return;

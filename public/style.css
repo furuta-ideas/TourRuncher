@@ -47,7 +47,7 @@ nav button span{font-size:16px}
 #app .panel{padding:16px;min-height:calc(100dvh - 138px)}#app h2,#app h3{margin-bottom:10px;line-height:1.45}#app p,#app li{line-height:1.5}#app .section-title{gap:8px;align-items:center}#app .pill{padding:3px 8px;white-space:nowrap}#app .primary,#app .secondary{padding:8px 12px;min-height:42px}#app .loading{padding:8px 0}
 #panel-prep{grid-template-columns:minmax(0,42fr) minmax(0,58fr);gap:18px;align-items:stretch}
 #panel-prep .tour-side{display:grid;grid-template-rows:minmax(230px,1fr) auto;min-height:calc(100dvh - 178px);gap:14px;align-self:start}
-#panel-prep .tour-picker{min-width:0;display:flex;flex-direction:column;justify-content:center;border-bottom:1px solid var(--line);padding-bottom:12px}
+#panel-prep .tour-picker{min-width:0;display:flex;flex-direction:column;justify-content:flex-start;border-bottom:1px solid var(--line);padding-bottom:12px}
 #panel-prep .tour-list{--row:64px;height:calc(var(--row)*3);padding:var(--row) 8px var(--row) 0;margin:8px 0 0;flex:none}
 #panel-prep .tour-item{height:var(--row);display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px;padding:10px 12px;white-space:nowrap}
 #panel-prep .tour-item time{flex:none;letter-spacing:0}#panel-prep .tour-item strong{display:block;min-width:0;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;line-height:1.5;-webkit-line-clamp:unset}
