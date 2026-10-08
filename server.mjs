@@ -42,8 +42,8 @@ async function children(id) {
 function compact(b) {
   const data = b[b.type] || {};
   const file = data.file || data.external;
-  return { id: b.id, type: b.type, text: plain(data.rich_text || []), rich: (data.rich_text || []).map(x => ({text:x.plain_text ?? x.text?.content ?? '', href:x.href ?? x.text?.link?.url ?? null, bold:!!x.annotations?.bold})),
-    url: file?.url || data.url || null, caption: plain(data.caption || []), name:data.name || '', cells: data.cells?.map(plain), checked: data.checked, children: [] };
+  return { id: b.id, type: b.type, text: plain(data.rich_text || []), rich: (data.rich_text || []).map(x => ({text:x.plain_text ?? x.text?.content ?? '', href:x.href ?? x.text?.link?.url ?? null, bold:!!x.annotations?.bold, color:x.annotations?.color || 'default', italic:!!x.annotations?.italic, underline:!!x.annotations?.underline, strike:!!x.annotations?.strikethrough})),
+    color:data.color || 'default', icon:data.icon?.emoji || '', url: file?.url || data.url || null, caption: plain(data.caption || []), name:data.name || '', cells: data.cells?.map(plain), checked: data.checked, children: [] };
 }
 async function tree(blocks, depth=0) {
   const nodes = [];
@@ -58,12 +58,12 @@ async function tree(blocks, depth=0) {
   return nodes;
 }
 const wanted = /役割分担|コンテンツ|ＦＡＱアプリ|FAQアプリ|IDとパスワード|トラブル|緊急連絡先/;
-async function sections() {
+async function sections(pattern=wanted) {
   const found = [];
   async function walk(blocks, depth=0) {
     for (const b of blocks) {
       const text = plain(b[b.type]?.rich_text || []);
-      if (b.type === 'toggle' && wanted.test(text)) found.push(...await tree([b]));
+      if (b.type === 'toggle' && pattern.test(text)) found.push(...await tree([b]));
       else if (b.has_children && depth < 8 && !['child_database','child_page'].includes(b.type)) await walk(await children(b.id),depth+1);
     }
   }
@@ -101,6 +101,7 @@ export const server = http.createServer(async(req,res) => {
     if(url.pathname.startsWith('/api/')) {
       if(!authenticated(req)) return json(res,401,{error:'パスワードを入力してください。'});
       if(req.method!=='GET') return json(res,405,{error:'この操作は使用できません。'});
+      if(url.pathname==='/api/roles') return json(res,200,{sections:await sections(/役割分担.*事前準備/)});
       if(url.pathname==='/api/playbook') return json(res,200,{sections:await sections()});
       if(url.pathname==='/api/tours') return json(res,200,{tours:await tours()});
       if(url.pathname==='/api/faq') {

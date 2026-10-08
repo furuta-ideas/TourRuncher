@@ -39,3 +39,27 @@ export function searchFAQ(rows, query) {
     return { rec, score };
   }).filter(x => x.score).sort((a,b) => b.score-a.score).map(x => x.rec);
 }
+
+// Match section titles, never incidental mentions inside instructions or logs.
+export function overviewBlocks(nodes) {
+  for(let i=0;i<nodes.length;i++) {
+    const n=nodes[i];
+    if((n.type.startsWith('heading_') || n.type==='toggle') && /^[^\p{L}\p{N}]*実施概要\s*$/u.test(n.text || '')) {
+      if(n.children?.length)return n.children;
+      const out=[];const level=Number(n.type.split('_')[1]) || 3;
+      for(let j=i+1;j<nodes.length;j++) {
+        const next=nodes[j];
+        if(next.type.startsWith('heading_') && Number(next.type.split('_')[1])<=level)break;
+        if(next.type==='divider')break;
+        out.push(next);
+      }
+      return out;
+    }
+  }
+  for(const n of nodes){const nested=overviewBlocks(n.children || []);if(nested.length)return nested;}
+  return [];
+}
+export function faqCategories(rows) {
+  const seen=new Set();return rows.flatMap(r=>{const name=r.tags?.[0]?.trim();if(!name || seen.has(name))return [];seen.add(name);return [{name,en:r.tags_en?.[0] || name}];});
+}
+export function filterFAQCategory(rows,name){return rows.filter(r=>(r.tags || []).some(t=>normalize(t)===normalize(name))).sort((a,b)=>(a.id || 0)-(b.id || 0));}

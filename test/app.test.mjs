@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { orderTours, initialTour, tour, parseFAQ, searchFAQ } from '../lib.mjs';
+import { orderTours, initialTour, tour, parseFAQ, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory } from '../lib.mjs';
 import { server } from '../server.mjs';
 
 test('本日の最も早い時間枠、最も近い未来、未来がない場合',()=>{
@@ -28,4 +28,18 @@ test('ログイン前の保護、誤入力、ログイン後のアクセス、�
     const altered=await fetch(`${url}/api/tours`,{headers:{Cookie:cookie.split(';')[0]+'x'}});assert.equal(altered.status,401);
     const home=await fetch(url);assert.equal(home.status,200);assert.match(await home.text(),/TourRuncher/);
   }finally{await new Promise(r=>server.close(r));}
+});
+
+test('実施概要はプロンプト内の言及を除外し、正式見出しの2つのコールアウトだけを取得',()=>{
+ const prompt={type:'toggle',text:'プロンプト',children:[{type:'paragraph',text:'実施までのログを読み込んで、実施概要を埋めて',children:[]},{type:'paragraph',text:'＃2',children:[]}]};
+ const overview={type:'callout',children:[{type:'bulleted_list_item',text:'所要時間：120分',rich:[{text:'120分',color:'pink',bold:true}]}]};
+ const customer={type:'callout',children:[{type:'bulleted_list_item',text:'団体名：学校'}]};
+ assert.deepEqual(overviewBlocks([prompt,{type:'heading_2',text:'🧾 実施概要'},overview,customer,{type:'divider'},{type:'heading_2',text:'コンテンツ'},prompt]),[overview,customer]);
+ assert.deepEqual(overviewBlocks([prompt]),[]);
+ assert.deepEqual(overviewBlocks([{type:'column',children:[{type:'toggle',text:'実施概要',children:[overview]}]}]),[overview]);
+});
+test('FAQカテゴリーはマスター順で重複除外し、キーワードではなくタグ完全一致で抽出',()=>{
+ const rows=[{id:2,tags:['歴史'],tags_en:['History'],question:'街の歴史'},{id:1,tags:['柏の葉スマートシティ概要'],question:'歴史も説明'},{id:3,tags:['歴史'],tags_en:['History']}];
+ assert.deepEqual(faqCategories(rows),[{name:'歴史',en:'History'},{name:'柏の葉スマートシティ概要',en:'柏の葉スマートシティ概要'}]);
+ assert.deepEqual(filterFAQCategory(rows,'歴史').map(r=>r.id),[2,3]);
 });

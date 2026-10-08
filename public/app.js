@@ -1,12 +1,12 @@
-import { initialTour, searchFAQ } from '/lib.mjs';
+import { initialTour, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory } from '/lib.mjs';
 const $ = id => document.getElementById(id);
-const state = { tours:[], selected:-1, detailCache:new Map(), lang:'ja', faq:[], matches:[], limit:4, faqSequence:0, detailSequence:0 };
+const state = { tours:[], selected:-1, detailCache:new Map(), lang:'ja', faq:[], matches:[], limit:4, faqSequence:0, detailSequence:0, category:null };
 function el(tag, text, className) { const n=document.createElement(tag); if(text!=null)n.textContent=text; if(className)n.className=className; return n; }
 function safeLink(url) { try { const u=new URL(url); return ['https:','http:','mailto:','tel:'].includes(u.protocol) ? u.href : null; } catch { return null; } }
 function link(url,text,className) { const a=el('a',text,className); const safe=safeLink(url); if(safe){a.href=safe;a.target='_blank';a.rel='noopener noreferrer';} return a; }
 function rich(target,node) {
   if(!node.rich?.length) {target.textContent=node.text || '';return;}
-  for(const r of node.rich){let item=r.href?link(r.href,r.text):el(r.bold?'strong':'span',r.text);target.append(item);}
+  for(const r of node.rich){const item=r.href?link(r.href,r.text):el(r.bold?'strong':'span',r.text);if(r.bold)item.classList.add('notion-bold');if(r.italic)item.classList.add('notion-italic');if(r.underline)item.classList.add('notion-underline');if(r.strike)item.classList.add('notion-strike');if(/^(gray|brown|orange|yellow|green|blue|purple|pink|red)(_background)?$/.test(r.color))item.classList.add('notion-'+r.color);target.append(item);}
 }
 function renderBlocks(nodes,target) {
   for(const n of nodes || []) {
@@ -27,7 +27,7 @@ function renderBlocks(nodes,target) {
       case 'child_page':block=link(`https://www.notion.so/${n.id.replaceAll('-','')}`,n.name || n.text || 'Notionで開く','file');break;
       default:block=el('p');rich(block,n);
     }
-    renderBlocks(n.children,block);target.append(block);
+    if(/^(gray|brown|orange|yellow|green|blue|purple|pink|red)(_background)?$/.test(n.color))block.classList.add('notion-'+n.color);if(n.type==='callout' && n.icon)block.prepend(el('span',n.icon,'callout-icon'));renderBlocks(n.children,block);target.append(block);
   }
 }
 function errorAt(target,error) { target.replaceChildren(el('p',error.message || String(error),'error')); }
@@ -71,18 +71,9 @@ async function selectTour(index) {
   for(const [k,v] of Object.entries(t.properties)){if(k==='案件' || !v)continue;const cell=el('div',null,'property');cell.append(el('dt',k),el('dd',v));dl.append(cell);}
   const overview=el('div',null,'notion-content');overview.append(el('p','実施概要を取得しています…','loading'));
   $('tour-detail').replaceChildren(dl,el('h3','実施概要'),overview);
-  try{let blocks=state.detailCache.get(t.id);if(!blocks){blocks=(await api(`/api/tour/${t.id}`)).blocks;state.detailCache.set(t.id,blocks);}if(seq!==state.detailSequence)return;
+  try{const blocks=(await api(`/api/tour/${t.id}`)).blocks;if(seq!==state.detailSequence)return;
     overview.replaceChildren();const selected=overviewBlocks(blocks);if(selected.length)renderBlocks(selected,overview);else overview.append(el('p','実施概要の記載はありません。詳細はNotionで確認してください。','hint'));
   }catch(error){if(seq===state.detailSequence)errorAt(overview,error);}
-}
-function overviewBlocks(nodes) {
-  for(let i=0;i<nodes.length;i++) {
-    const n=nodes[i];if(/実施概要/.test(n.text)){
-      if(n.children?.length)return n.children;
-      const out=[];for(let j=i+1;j<nodes.length;j++){if(nodes[j].type.startsWith('heading_'))break;out.push(nodes[j]);}return out;
-    }
-    const nested=overviewBlocks(n.children || []);if(nested.length)return nested;
-  }return [];
 }
 let scrollTimer;
 $('tour-list').addEventListener('scroll',()=>{clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{const list=$('tour-list');const center=list.scrollTop+list.clientHeight/2;let best=0;let dist=Infinity;Array.from(list.children).forEach((n,i)=>{const d=Math.abs(n.offsetTop+n.offsetHeight/2-center);if(d<dist){best=i;dist=d;}});selectTour(best);},130);});
@@ -116,20 +107,23 @@ async function loadPlaybook(){
     $('faq-master').href||= 'https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/';
   }catch(error){for(const id of ['roles','materials','troubles','contacts','menti-info','faq-credentials'])errorAt($(id),error);}
 }
-function load(){ $('today').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(new Date());loadTours();loadPlaybook(); }
-$('roles-button').addEventListener('click',()=>$('roles-dialog').showModal());$('roles-close').addEventListener('click',()=>$('roles-dialog').close());
+function load(){ $('today').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(new Date());loadTours();loadPlaybook();loadCategories(); }
+$('roles-button').addEventListener('click',async()=>{const target=$('roles');target.replaceChildren(el('p','最新の役割分担と事前準備をNotionから取得しています…','loading'));$('roles-dialog').showModal();try{const data=await api('/api/roles');displaySection(target,section(data.sections,/役割分担/));}catch(error){errorAt(target,error);}});$('roles-close').addEventListener('click',()=>$('roles-dialog').close());
 let faqTimer;
 async function faqSearch() {
-  const query=$('faq-query').value.trim();const seq=++state.faqSequence;state.limit=4;
-  if(!query){state.matches=[];drawFAQ();$('faq-status').textContent='FAQマスターの最新データから検索します。';return;}
+  const query=$('faq-query').value.trim();const category=state.category;const seq=++state.faqSequence;state.limit=4;
+  if(!query && !category){state.matches=[];drawFAQ();$('faq-status').textContent='FAQマスターの最新データから検索します。';return;}
   $('faq-status').textContent='最新のFAQから検索しています…';
-  try{const data=await api('/api/faq');if(seq!==state.faqSequence)return;state.faq=data.rows;state.matches=searchFAQ(state.faq,query);$('faq-master').href=data.source;drawFAQ();}catch(error){if(seq===state.faqSequence){$('faq-status').textContent=error.message;$('faq-results').replaceChildren();$('faq-more').hidden=true;}}
+  try{const data=await api('/api/faq');if(seq!==state.faqSequence)return;state.faq=data.rows;state.matches=category?filterFAQCategory(state.faq,category):searchFAQ(state.faq,query);renderCategories();$('faq-master').href=data.source;drawFAQ();}catch(error){if(seq===state.faqSequence){$('faq-status').textContent=error.message;$('faq-results').replaceChildren();$('faq-more').hidden=true;}}
 }
-$('faq-form').addEventListener('submit',e=>{e.preventDefault();clearTimeout(faqTimer);faqSearch();});
-$('faq-query').addEventListener('input',()=>{clearTimeout(faqTimer);++state.faqSequence;faqTimer=setTimeout(faqSearch,450);});
+$('faq-form').addEventListener('submit',e=>{e.preventDefault();clearTimeout(faqTimer);state.category=null;renderCategories();faqSearch();});
+$('faq-query').addEventListener('input',()=>{clearTimeout(faqTimer);state.category=null;renderCategories();++state.faqSequence;faqTimer=setTimeout(faqSearch,450);});
 function drawFAQ(){ $('faq-results').replaceChildren();for(const r of state.matches.slice(0,state.limit)){
   const en=state.lang==='en';const card=el('article',null,'faq-card');card.append(el('p',(en?r.tags_en:r.tags)?.join(' / ') || '', 'tag'),el('h3',en?r.question_en || r.question:r.question));for(const answer of (en?r.answers_en || r.answers:r.answers))card.append(el('p',answer));$('faq-results').append(card);
-  }$('faq-more').hidden=state.matches.length<=state.limit;$('faq-status').textContent=state.matches.length?`${state.matches.length}件中 ${Math.min(state.limit,state.matches.length)}件を表示`:$('faq-query').value.trim()?'一致するFAQがありません。別のキーワードで検索してください。':'FAQマスターの最新データから検索します。';
+  }$('faq-more').hidden=state.matches.length<=state.limit;$('faq-status').textContent=state.matches.length?`${state.category?'カテゴリー：'+state.category+'　':''}${state.matches.length}件中 ${Math.min(state.limit,state.matches.length)}件を表示`:$('faq-query').value.trim()?'一致するFAQがありません。別のキーワードで検索してください。':'FAQマスターの最新データから検索します。';
 }
-for(const lang of ['ja','en'])$(`lang-${lang}`).addEventListener('click',()=>{state.lang=lang;$('lang-ja').setAttribute('aria-pressed',String(lang==='ja'));$('lang-en').setAttribute('aria-pressed',String(lang==='en'));drawFAQ();});
+for(const lang of ['ja','en'])$(`lang-${lang}`).addEventListener('click',()=>{state.lang=lang;$('lang-ja').setAttribute('aria-pressed',String(lang==='ja'));$('lang-en').setAttribute('aria-pressed',String(lang==='en'));renderCategories();drawFAQ();});
 $('faq-more').addEventListener('click',()=>{state.limit+=4;drawFAQ();});
+
+function renderCategories(){const target=$('faq-categories');target.replaceChildren();for(const c of faqCategories(state.faq)){const b=el('button',state.lang==='en'?c.en:c.name,'category-chip');b.type='button';b.setAttribute('aria-pressed',String(state.category===c.name));b.addEventListener('click',()=>{clearTimeout(faqTimer);state.category=c.name;$('faq-query').value='';renderCategories();faqSearch();});target.append(b);}}
+async function loadCategories(){try{const data=await api('/api/faq');state.faq=data.rows;renderCategories();}catch(error){errorAt($('faq-categories'),error);}}
