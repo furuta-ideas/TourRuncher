@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: tourruncher
+    runtime: node
+    plan: free
+    repo: https://github.com/furuta-ideas/TourRuncher
+    branch: main
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: NOTION_TOKEN
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
