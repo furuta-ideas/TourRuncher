@@ -63,3 +63,11 @@ export function faqCategories(rows) {
   const seen=new Set();return rows.flatMap(r=>{const name=r.tags?.[0]?.trim();if(!name || seen.has(name))return [];seen.add(name);return [{name,en:r.tags_en?.[0] || name}];});
 }
 export function filterFAQCategory(rows,name){return rows.filter(r=>(r.tags || []).some(t=>normalize(t)===normalize(name))).sort((a,b)=>(a.id || 0)-(b.id || 0));}
+
+export function orderedProperties(properties){const first=['Select','Status','会場','時間枠','人数','主担当','副担当'];return [...first,...Object.keys(properties).filter(k=>!first.includes(k))].filter(k=>!['案件','調整進捗'].includes(k) && properties[k]).map(k=>[k,properties[k]]);}
+export class RecentCache {
+ constructor(limit=10,entries=[]){this.limit=limit;this.entries=new Map(entries.slice(-limit));}
+ get(key){const value=this.entries.get(key);if(value!==undefined){this.entries.delete(key);this.entries.set(key,value);}return value;}
+ set(key,value){this.entries.delete(key);this.entries.set(key,value);while(this.entries.size>this.limit)this.entries.delete(this.entries.keys().next().value);return value;}
+ serialize(){return [...this.entries];}
+}

@@ -1,5 +1,12 @@
-import { initialTour, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory } from '/lib.mjs';
+import { initialTour, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory, orderedProperties, RecentCache } from './lib.mjs';
 const $ = id => document.getElementById(id);
+const apiBase=location.hostname==='furuta-ideas.github.io'?'https://tourruncher.onrender.com':'';
+let accessToken='';
+function saved(key,fallback){try{return JSON.parse(sessionStorage.getItem(key)) || fallback;}catch{return fallback;}}
+function save(key,value){try{sessionStorage.setItem(key,JSON.stringify(value));}catch{}}
+const recent=new RecentCache(10,saved('tour-recent-v1',[]));
+let rolesCache=saved('tour-roles-v1',null);
+const pending=new Map();
 const state = { tours:[], selected:-1, detailCache:new Map(), lang:'ja', faq:[], matches:[], limit:4, faqSequence:0, detailSequence:0, category:null };
 function el(tag, text, className) { const n=document.createElement(tag); if(text!=null)n.textContent=text; if(className)n.className=className; return n; }
 function safeLink(url) { try { const u=new URL(url); return ['https:','http:','mailto:','tel:'].includes(u.protocol) ? u.href : null; } catch { return null; } }
@@ -32,9 +39,11 @@ function renderBlocks(nodes,target) {
 }
 function errorAt(target,error) { target.replaceChildren(el('p',error.message || String(error),'error')); }
 async function api(path,options) {
-  const r=await fetch(path,{cache:'no-store',...options}); const data=await r.json();
-  if(!r.ok) { if(r.status===401 && path!='/api/login'){ $('app').hidden=true;$('login').hidden=false;$('password').focus(); } throw new Error(data.error || '情報を取得できませんでした。'); }
-  return data;
+ const key=(!options || !options.method || options.method==='GET')?path:null;
+ if(key && pending.has(key))return pending.get(key);
+ const job=(async()=>{const headers={...options?.headers,...(accessToken?{Authorization:'Bearer '+accessToken}:{})};const r=await fetch(apiBase+path,{cache:'no-store',...options,headers});const data=await r.json();
+ if(!r.ok){if(r.status===401 && path!='/api/login'){$('app').hidden=true;$('login').hidden=false;$('password').focus();}throw new Error(data.error || '情報を取得できませんでした。');}return data;})();
+ if(key)pending.set(key,job);try{return await job;}finally{if(key)pending.delete(key);}
 }
 function today() {return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
 function tab(name) {
@@ -56,34 +65,43 @@ async function opening() {
 opening();
 $('login-form').addEventListener('submit',async e=>{
   e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;$('login-error').textContent='';
-  try{await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});$('password').value='';$('login').hidden=true;$('app').hidden=false;tab('prep');load();}catch(error){$('login-error').textContent=error.message;}finally{b.disabled=false;}
+  try{const login=await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});accessToken=login.token || '';$('password').value='';$('login').hidden=true;$('app').hidden=false;tab('prep');load();}catch(error){$('login-error').textContent=error.message;}finally{b.disabled=false;}
 });
 function positionTour(index) {
   const item=$('tour-list').children[index];if(item)$('tour-list').scrollTop=item.offsetTop-($('tour-list').clientHeight-item.offsetHeight)/2;
 }
 async function selectTour(index) {
-  const t=state.tours[index];if(!t || state.selected===index)return;
+  let t=state.tours[index];if(!t || state.selected===index)return;const cached=recent.get(t.id);if(t.cached && cached)t=cached.tour;
   state.selected=index;const seq=++state.detailSequence;
   Array.from($('tour-list').children).forEach((b,i)=>b.setAttribute('aria-current',String(i===index)));
   $('tour-title').textContent=t.title;$('tour-badge').hidden=false;$('tour-badge').textContent=t.date===today()?'本日のツアー':t.date>today()?'今後のツアー':'過去のツアー';
   $('tour-link').href=t.url;$('tour-link').hidden=false;
   const dl=el('dl',null,'properties');
-  for(const [k,v] of Object.entries(t.properties)){if(k==='案件' || !v)continue;const cell=el('div',null,'property');cell.title=`${k}：${v}`;cell.append(el('dt',k),el('dd',v));dl.append(cell);}
-  const overview=el('div',null,'notion-content');overview.append(el('p','実施概要を取得しています…','loading'));
+  for(const [k,v] of orderedProperties(t.properties)){const cell=el('div',null,'property');cell.title=`${k}：${v}`;cell.append(el('dt',k),el('dd',v));dl.append(cell);}
+  const overview=el('div',null,'notion-content');const draw=nodes=>{overview.replaceChildren();if(nodes?.length)renderBlocks(nodes,overview);else overview.append(el('p','実施概要の記載はありません。','hint'));};if(cached)draw(cached.overview);else overview.append(el('p','実施概要を取得しています…','loading'));
   $('tour-properties').replaceChildren(dl);$('tour-detail').replaceChildren(overview);
-  try{const blocks=(await api(`/api/tour/${t.id}`)).blocks;if(seq!==state.detailSequence)return;
-    overview.replaceChildren();const selected=overviewBlocks(blocks);if(selected.length)renderBlocks(selected,overview);else overview.append(el('p','実施概要の記載はありません。詳細はNotionで確認してください。','hint'));
-  }catch(error){if(seq===state.detailSequence)errorAt(overview,error);}
+  try{const data=await api('/api/tour/'+t.id+(cached?.version && Date.now()-(cached.savedAt || 0)<45*60*1000?'?version='+encodeURIComponent(cached.version):''));
+    if(data.notModified){recent.set(t.id,cached);save('tour-recent-v1',recent.serialize());return;}
+    const selected=data.overview || overviewBlocks(data.blocks || []);const updated={tour:data.tour || t,overview:selected,version:data.version,savedAt:Date.now()};recent.set(t.id,updated);save('tour-recent-v1',recent.serialize());
+    if(seq!==state.detailSequence)return;
+    if(JSON.stringify(cached?.overview)!==JSON.stringify(selected))draw(selected);
+    if(data.tour){const dl=el('dl',null,'properties');for(const [k,v] of orderedProperties(data.tour.properties)){const cell=el('div',null,'property');cell.title=k+'：'+v;cell.append(el('dt',k),el('dd',v));dl.append(cell);}$('tour-properties').replaceChildren(dl);}
+  }catch(error){if(seq===state.detailSequence){if(cached){overview.append(el('p','最新情報を確認できませんでした。キャッシュを表示中です。','hint'));}else errorAt(overview,error);}}
 }
 let scrollTimer;
 $('tour-list').addEventListener('scroll',()=>{clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{const list=$('tour-list');const center=list.scrollTop+list.clientHeight/2;let best=0;let dist=Infinity;Array.from(list.children).forEach((n,i)=>{const d=Math.abs(n.offsetTop+n.offsetHeight/2-center);if(d<dist){best=i;dist=d;}});selectTour(best);},130);});
 async function loadTours() {
-  try{state.tours=(await api('/api/tours')).tours;state.selected=-1;state.detailCache.clear();$('tour-count').textContent=`${state.tours.length}件`;$('tour-list').replaceChildren();
+ const previous=recent.serialize().map(([,v])=>({...v.tour,cached:true}));
+ if(previous.length){state.tours=previous.sort((a,b)=>a.date.localeCompare(b.date)||a.minute-b.minute);renderTours();}
+ try{const data=await api('/api/tours');const selectedId=state.tours[state.selected]?.id;state.tours=data.tours;renderTours(selectedId);
+ }catch(error){if(!previous.length){$('tour-count').textContent='取得できません';errorAt($('tour-list'),error);}}
+}
+function renderTours(selectedId){state.selected=-1;$('tour-count').textContent=`${state.tours.length}件`;$('tour-list').replaceChildren();
     if(!state.tours.length){$('tour-list').append(el('p','日付付きのツアー案件はありません。','hint'));$('tour-detail').replaceChildren(el('p','ツアー一覧に案件を追加すると表示されます。','hint'));return;}
     state.tours.reverse();
     state.tours.forEach((t,i)=>{const b=el('button',null,'tour-item');b.type='button';b.title=`${t.title} ${t.properties['時間枠'] || ''}`;b.setAttribute('aria-label',b.title);b.append(el('time',t.date.replaceAll('-','')),el('strong',t.title.replace(/^\s*\d{8}[\s_　-]*/,'')));b.addEventListener('click',()=>{positionTour(i);selectTour(i);});$('tour-list').append(b);});
-    const ascending=[...state.tours].reverse();const index=state.tours.length-1-initialTour(ascending,today());requestAnimationFrame(()=>{positionTour(index);selectTour(index);});
-  }catch(error){$('tour-count').textContent='取得できません';errorAt($('tour-list'),error);}
+    const ascending=[...state.tours].reverse();const existing=state.tours.findIndex(t=>t.id===selectedId);const index=existing>=0?existing:state.tours.length-1-initialTour(ascending,today());requestAnimationFrame(()=>{positionTour(index);selectTour(index);});
+
 }
 function flatten(nodes){return (nodes || []).flatMap(n=>[n,...flatten(n.children)]);}
 function section(nodes,pattern){return flatten(nodes).find(n=>n.type==='toggle' && pattern.test(n.text));}
@@ -96,7 +114,7 @@ function displaySection(target,node) {target.replaceChildren();if(node)renderBlo
 async function loadPlaybook(){
   try{
     const nodes=(await api('/api/playbook')).sections;
-    displaySection($('roles'),section(nodes,/役割分担/));displaySection($('materials'),section(nodes,/コンテンツ/));renderTroubles(section(nodes,/トラブル/));displaySection($('contacts'),section(nodes,/緊急連絡先/));
+    displaySection($('materials'),section(nodes,/コンテンツ/));renderTroubles(section(nodes,/トラブル/));displaySection($('contacts'),section(nodes,/緊急連絡先/));
     const menti=section(nodes,/Mentimeter/i);$('menti-info').replaceChildren();
     if(menti){const texts=flatten(menti.children).map(n=>n.text).filter(Boolean);const all=texts.join('\n');const mail=all.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];const pwd=all.match(/(?:Pwd|Password|パスワード|PWD)\s*[：:]\s*([^\s]+)/i)?.[1];if(mail)$('menti-info').append(copyRow(`ID：${mail}`,mail));if(pwd)$('menti-info').append(copyRow(`パスワード：${pwd}`,pwd));
       if(!mail || !pwd)$('menti-info').append(el('p','ログイン情報を確認してください。','hint'));const d=el('details');d.append(el('summary','使い方'));renderBlocks(menti.children,d);$('menti-info').append(d);
@@ -108,7 +126,7 @@ async function loadPlaybook(){
   }catch(error){for(const id of ['roles','materials','troubles','contacts','menti-info'])errorAt($(id),error);}
 }
 function load(){ $('today').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(new Date());loadTours();loadPlaybook();loadCategories(); }
-$('roles-button').addEventListener('click',async()=>{const target=$('roles');target.replaceChildren(el('p','最新の役割分担と事前準備をNotionから取得しています…','loading'));$('roles-dialog').showModal();try{const data=await api('/api/roles');displaySection(target,section(data.sections,/役割分担/));}catch(error){errorAt(target,error);}});$('roles-close').addEventListener('click',()=>$('roles-dialog').close());
+$('roles-button').addEventListener('click',async()=>{const target=$('roles');if(rolesCache)displaySection(target,rolesCache);else target.replaceChildren(el('p','読み込み中…','loading'));$('roles-dialog').showModal();try{const data=await api('/api/roles');const latest=section(data.sections,/役割分担/);if(JSON.stringify(latest)!==JSON.stringify(rolesCache)){rolesCache=latest;save('tour-roles-v1',latest);displaySection(target,latest);}}catch(error){if(rolesCache)target.append(el('p','最新情報を確認できませんでした。キャッシュを表示中です。','hint'));else errorAt(target,error);}});$('roles-close').addEventListener('click',()=>$('roles-dialog').close());
 let faqTimer;
 async function faqSearch() {
   const query=$('faq-query').value.trim();const category=state.category;const seq=++state.faqSequence;state.limit=4;

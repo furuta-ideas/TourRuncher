@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { plain, tour, orderTours, parseFAQ } from './lib.mjs';
+import { plain, tour, orderTours, parseFAQ, overviewBlocks } from './lib.mjs';
 
 const env = process.env;
 const secret = env.SESSION_SECRET || randomBytes(32).toString('hex');
@@ -12,7 +12,7 @@ const attempts = new Map();
 const sign = text => createHmac('sha256', secret).update(text).digest('base64url');
 const equal = (a,b) => Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b));
 function authenticated(req) {
-  const token = (req.headers.cookie || '').match(/(?:^|;\s*)tour_session=([^;]+)/)?.[1] || '';
+  const token = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9_.-]+)$/)?.[1] || (req.headers.cookie || '').match(/(?:^|;\s*)tour_session=([^;]+)/)?.[1] || '';
   const [expiry, nonce, signature] = token.split('.');
   return !!signature && +expiry > Date.now() && equal(sign(`${expiry}.${nonce}`), signature);
 }
@@ -62,7 +62,9 @@ async function sections(pattern=wanted) {
   const found = [];
   async function walk(blocks, depth=0) {
     for (const b of blocks) {
+      if(pattern!==wanted && found.length)return;
       const text = plain(b[b.type]?.rich_text || []);
+      if(pattern===wanted && /役割分担/.test(text))continue;
       if (b.type === 'toggle' && pattern.test(text)) found.push(...await tree([b]));
       else if (b.has_children && depth < 8 && !['child_database','child_page'].includes(b.type)) await walk(await children(b.id),depth+1);
     }
@@ -82,10 +84,14 @@ export const server = http.createServer(async(req,res) => {
   res.setHeader('X-Content-Type-Options','nosniff'); res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   const url = new URL(req.url,'http://localhost');
+  const pagesOrigin='https://furuta-ideas.github.io';
+  const pagesRequest=req.headers.origin===pagesOrigin;
+  if(pagesRequest && url.pathname.startsWith('/api/')){res.setHeader('Access-Control-Allow-Origin',pagesOrigin);res.setHeader('Vary','Origin');res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization');}
+  if(req.method==='OPTIONS' && url.pathname.startsWith('/api/')){res.writeHead(pagesRequest?204:403);return res.end();}
   try {
     if(url.pathname==='/health') return json(res,200,{ok:true});
     if(url.pathname==='/api/login' && req.method==='POST') {
-      if (req.headers.origin && req.headers.origin !== `${req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https':'http')}://${req.headers.host}`) return json(res,403,{error:'アクセス元を確認できません。'});
+      if (req.headers.origin && !pagesRequest && req.headers.origin !== `${req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https':'http')}://${req.headers.host}`) return json(res,403,{error:'アクセス元を確認できません。'});
       const key=req.socket.remoteAddress;
       const now=Date.now();
       for (const [ip,value] of attempts) if(value.until<now) attempts.delete(ip);
@@ -96,7 +102,7 @@ export const server = http.createServer(async(req,res) => {
       attempts.delete(key);
       const value=`${now+12*60*60*1000}.${randomBytes(16).toString('hex')}`;
       res.setHeader('Set-Cookie',`tour_session=${value}.${sign(value)}; HttpOnly; SameSite=Strict; Path=/${env.NODE_ENV==='production' ? '; Secure':''}`);
-      return json(res,200,{ok:true});
+      return json(res,200,{ok:true,...(pagesRequest?{token:`${value}.${sign(value)}`}:{})});
     }
     if(url.pathname.startsWith('/api/')) {
       if(!authenticated(req)) return json(res,401,{error:'パスワードを入力してください。'});
@@ -110,7 +116,17 @@ export const server = http.createServer(async(req,res) => {
         return json(res,200,{rows:parseFAQ(await response.text()),source:master});
       }
       const id=url.pathname.match(/^\/api\/tour\/([0-9a-f-]{32,36})$/i)?.[1];
-      if(id) { const p=await notion(`pages/${id}`); if(p.parent?.data_source_id!==sourceId && p.parent?.database_id!=='284cbc412aed8076a429fe54198f6444') return json(res,403,{error:'ツアー一覧の案件を選択してください。'}); return json(res,200,{blocks:await tree(await children(id))}); }
+      if(id) {
+        const p=await notion('pages/'+id);
+        if(p.parent?.data_source_id!==sourceId && p.parent?.database_id!=='284cbc412aed8076a429fe54198f6444')return json(res,403,{error:'ツアー一覧の案件を選択してください。'});
+        const version=p.last_edited_time;
+        if(version && url.searchParams.get('version')===version)return json(res,200,{notModified:true,version});
+        const root=await children(id);const selected=overviewBlocks(root.map(compact));
+        let overview;
+        if(selected.length){const ids=new Set(selected.map(n=>n.id));overview=await tree(root.filter(n=>ids.has(n.id)));}
+        else overview=overviewBlocks(await tree(root));
+        return json(res,200,{tour:tour(p),overview,version});
+      }
       return json(res,404,{error:'ページが見つかりません。'});
     }
     const file=publicFiles[url.pathname];

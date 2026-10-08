@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { orderTours, initialTour, tour, parseFAQ, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory } from '../lib.mjs';
+import { orderTours, initialTour, tour, parseFAQ, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory, orderedProperties, RecentCache } from '../lib.mjs';
 import { server } from '../server.mjs';
 
 test('本日の最も早い時間枠、最も近い未来、未来がない場合',()=>{
@@ -25,6 +25,10 @@ test('ログイン前の保護、誤入力、ログイン後のアクセス、�
     const login=await fetch(`${url}/api/login`,{method:'POST',body:JSON.stringify({password:'2026'})});assert.equal(login.status,200);
     const cookie=login.headers.get('set-cookie');assert.match(cookie,/HttpOnly/);assert.match(cookie,/SameSite=Strict/);
     const playbook=await fetch(`${url}/api/playbook`,{headers:{Cookie:cookie.split(';')[0]}});assert.equal(playbook.status,502);assert.match((await playbook.json()).error,/NOTION_TOKEN/);
+    const blocked=await fetch(url+'/api/login',{method:'POST',headers:{Origin:'https://untrusted.example'},body:JSON.stringify({password:'2026'})});assert.equal(blocked.status,403);
+    const preflight=await fetch(url+'/api/tours',{method:'OPTIONS',headers:{Origin:'https://furuta-ideas.github.io'}});assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-origin'),'https://furuta-ideas.github.io');
+    const pagesLogin=await fetch(url+'/api/login',{method:'POST',headers:{Origin:'https://furuta-ideas.github.io'},body:JSON.stringify({password:'2026'})});const pagesData=await pagesLogin.json();assert.ok(pagesData.token);
+    const bearer=await fetch(url+'/api/playbook',{headers:{Authorization:'Bearer '+pagesData.token,Origin:'https://furuta-ideas.github.io'}});assert.equal(bearer.status,502);assert.match((await bearer.json()).error,/NOTION_TOKEN/);
     const altered=await fetch(`${url}/api/tours`,{headers:{Cookie:cookie.split(';')[0]+'x'}});assert.equal(altered.status,401);
     const home=await fetch(url);assert.equal(home.status,200);assert.match(await home.text(),/TourRuncher/);
   }finally{await new Promise(r=>server.close(r));}
@@ -43,3 +47,6 @@ test('FAQカテゴリーはマスター順で重複除外し、キーワード�
  assert.deepEqual(faqCategories(rows),[{name:'歴史',en:'History'},{name:'柏の葉スマートシティ概要',en:'柏の葉スマートシティ概要'}]);
  assert.deepEqual(filterFAQCategory(rows,'歴史').map(r=>r.id),[2,3]);
 });
+
+test('プロパティの指定順と調整進捗の非表示',()=>{assert.deepEqual(orderedProperties({副担当:'副',調整進捗:'内部',人数:'15',Status:'準備',Select:'公式',主担当:'主',時間枠:'10:00',会場:'KOIL',お出迎え:'入口'}).map(([k])=>k),['Select','Status','会場','時間枠','人数','主担当','副担当','お出迎え']);});
+test('直近10案件のキャッシュは再表示で優先度を上げ、11件目で最も古い案件を削除',()=>{const c=new RecentCache(10);for(let i=0;i<10;i++)c.set(String(i),{overview:[i],tour:{id:String(i)}});c.get('0');c.set('10',{overview:[10]});assert.equal(c.entries.size,10);assert.equal(c.get('1'),undefined);assert.deepEqual(c.get('0').overview,[0]);const restored=new RecentCache(10,c.serialize());assert.equal(restored.entries.size,10);assert.deepEqual(restored.get('10').overview,[10]);});
