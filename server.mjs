@@ -1,5 +1,4 @@
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { plain, tour, orderTours, parseFAQ, overviewBlocks } from './lib.mjs';
 
@@ -12,7 +11,7 @@ const attempts = new Map();
 const sign = text => createHmac('sha256', secret).update(text).digest('base64url');
 const equal = (a,b) => Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b));
 function authenticated(req) {
-  const token = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9_.-]+)$/)?.[1] || (req.headers.cookie || '').match(/(?:^|;\s*)tour_session=([^;]+)/)?.[1] || '';
+  const token = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9_.-]+)$/)?.[1] || '';
   const [expiry, nonce, signature] = token.split('.');
   return !!signature && +expiry > Date.now() && equal(sign(`${expiry}.${nonce}`), signature);
 }
@@ -78,8 +77,6 @@ async function tours() {
 }
 function json(res,status,data) { res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}); res.end(JSON.stringify(data)); }
 async function body(req) { let text=''; for await(const chunk of req) { text+=chunk; if(text.length>2048) throw new Error('入力が長すぎます。'); } return JSON.parse(text || '{}'); }
-const publicFiles = { '/':'index.html', '/app.js':'app.js', '/style.css':'style.css', '/lib.mjs':'../lib.mjs', '/opening.png':'opening.png', '/favicon.svg':'favicon.svg', '/icon.png':'icon.png' };
-const types={ html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',png:'image/png',svg:'image/svg+xml' };
 export const server = http.createServer(async(req,res) => {
   res.setHeader('X-Content-Type-Options','nosniff'); res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
@@ -90,8 +87,9 @@ export const server = http.createServer(async(req,res) => {
   if(req.method==='OPTIONS' && url.pathname.startsWith('/api/')){res.writeHead(pagesRequest?204:403);return res.end();}
   try {
     if(url.pathname==='/health') return json(res,200,{ok:true});
+    if(req.headers.origin && !pagesRequest && url.pathname.startsWith('/api/'))return json(res,403,{error:'アクセス元を確認できません。'});
     if(url.pathname==='/api/login' && req.method==='POST') {
-      if (req.headers.origin && !pagesRequest && req.headers.origin !== `${req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https':'http')}://${req.headers.host}`) return json(res,403,{error:'アクセス元を確認できません。'});
+      if (!pagesRequest) return json(res,403,{error:'アクセス元を確認できません。'});
       const key=req.socket.remoteAddress;
       const now=Date.now();
       for (const [ip,value] of attempts) if(value.until<now) attempts.delete(ip);
@@ -101,8 +99,7 @@ export const server = http.createServer(async(req,res) => {
       if(typeof input.password!=='string' || !equal(input.password,env.APP_PASSWORD || '2026')) { entry.count++; attempts.set(key,entry); return json(res,401,{error:'パスワードが違います。'}); }
       attempts.delete(key);
       const value=`${now+12*60*60*1000}.${randomBytes(16).toString('hex')}`;
-      res.setHeader('Set-Cookie',`tour_session=${value}.${sign(value)}; HttpOnly; SameSite=Strict; Path=/${env.NODE_ENV==='production' ? '; Secure':''}`);
-      return json(res,200,{ok:true,...(pagesRequest?{token:`${value}.${sign(value)}`}:{})});
+      return json(res,200,{ok:true,token:`${value}.${sign(value)}`});
     }
     if(url.pathname.startsWith('/api/')) {
       if(!authenticated(req)) return json(res,401,{error:'パスワードを入力してください。'});
@@ -129,11 +126,7 @@ export const server = http.createServer(async(req,res) => {
       }
       return json(res,404,{error:'ページが見つかりません。'});
     }
-    const file=publicFiles[url.pathname];
-    if(!file || !['GET','HEAD'].includes(req.method)) { res.writeHead(404); return res.end('Not found'); }
-    const bytes=await readFile(new URL(`./public/${file}`,import.meta.url));
-    res.writeHead(200,{'Content-Type':types[file.split('.').pop()],'Cache-Control':file==='opening.png'?'public, max-age=86400':'no-cache'});
-    res.end(req.method==='HEAD' ? undefined:bytes);
+    return json(res,404,{error:'Not found'});
   } catch(error) { json(res,502,{error:error.name==='TimeoutError'?'接続がタイムアウトしました。アプリを開き直してください。':error.message}); }
 });
-if(process.argv[1] && new URL(import.meta.url).pathname.endsWith(process.argv[1].replaceAll('\\','/').split('/').pop())) server.listen(Number(env.PORT)||3000,'0.0.0.0',()=>console.log(`TourRuncher listening on ${Number(env.PORT)||3000}`));
+if(process.argv[1] && new URL(import.meta.url).pathname.endsWith(process.argv[1].replaceAll('\\','/').split('/').pop())) server.listen(Number(env.PORT)||3000,'0.0.0.0',()=>console.log(`TourRuncher API listening on ${Number(env.PORT)||3000}`));

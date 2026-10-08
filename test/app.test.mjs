@@ -16,22 +16,22 @@ test('現在のFAQマスター形式からJSONのみ抽出し日英検索',async
   const html=await readFile(new URL('../../index.html',import.meta.url),'utf8').catch(()=> 'const FAQ_DB = [{"id":1,"question":"街の人口","answers":["人口は約14000人"],"question_en":"City population","answers_en":["14000 residents"]}];');
   const rows=parseFAQ(html);assert.ok(rows.length>0);assert.ok(searchFAQ(rows,'人口').length);assert.ok(searchFAQ(rows,'population').length);assert.equal(searchFAQ(rows,'ZZZZQX987654').length,0);assert.throws(()=>parseFAQ('const FAQ_DB = doSomething();'));
 });
-test('ログイン前の保護、誤入力、ログイン後のアクセス、秘密ファイル非公開',async()=>{
-  await new Promise(r=>server.listen(0,'127.0.0.1',r));const url=`http://127.0.0.1:${server.address().port}`;
-  try{
-    assert.equal((await fetch(`${url}/api/tours`)).status,401);
-    assert.equal((await fetch(`${url}/.env`)).status,404);
-    const wrong=await fetch(`${url}/api/login`,{method:'POST',body:JSON.stringify({password:'wrong'})});assert.equal(wrong.status,401);
-    const login=await fetch(`${url}/api/login`,{method:'POST',body:JSON.stringify({password:'2026'})});assert.equal(login.status,200);
-    const cookie=login.headers.get('set-cookie');assert.match(cookie,/HttpOnly/);assert.match(cookie,/SameSite=Strict/);
-    const playbook=await fetch(`${url}/api/playbook`,{headers:{Cookie:cookie.split(';')[0]}});assert.equal(playbook.status,502);assert.match((await playbook.json()).error,/NOTION_TOKEN/);
-    const blocked=await fetch(url+'/api/login',{method:'POST',headers:{Origin:'https://untrusted.example'},body:JSON.stringify({password:'2026'})});assert.equal(blocked.status,403);
-    const preflight=await fetch(url+'/api/tours',{method:'OPTIONS',headers:{Origin:'https://furuta-ideas.github.io'}});assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-origin'),'https://furuta-ideas.github.io');
-    const pagesLogin=await fetch(url+'/api/login',{method:'POST',headers:{Origin:'https://furuta-ideas.github.io'},body:JSON.stringify({password:'2026'})});const pagesData=await pagesLogin.json();assert.ok(pagesData.token);
-    const bearer=await fetch(url+'/api/playbook',{headers:{Authorization:'Bearer '+pagesData.token,Origin:'https://furuta-ideas.github.io'}});assert.equal(bearer.status,502);assert.match((await bearer.json()).error,/NOTION_TOKEN/);
-    const altered=await fetch(`${url}/api/tours`,{headers:{Cookie:cookie.split(';')[0]+'x'}});assert.equal(altered.status,401);
-    const home=await fetch(url);assert.equal(home.status,200);assert.match(await home.text(),/TourRuncher/);
-  }finally{await new Promise(r=>server.close(r));}
+test('RenderはAPI専用：画面非公開、Pages限定ログイン、Bearer認証必須',async()=>{
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const url='http://127.0.0.1:'+server.address().port;const origin='https://furuta-ideas.github.io';
+ try{
+  for(const path of ['/','/index.html','/app.js','/style.css','/opening.png','/icon.png','/lib.mjs','/.env'])for(const method of ['GET','HEAD'])assert.equal((await fetch(url+path,{method})).status,404);
+  assert.equal((await fetch(url+'/health')).status,200);
+  assert.equal((await fetch(url+'/api/tours')).status,401);
+  for(const badOrigin of [undefined,'https://untrusted.example',url]){const r=await fetch(url+'/api/login',{method:'POST',headers:badOrigin?{Origin:badOrigin}:{},body:JSON.stringify({password:'2026'})});assert.equal(r.status,403);}
+  const wrong=await fetch(url+'/api/login',{method:'POST',headers:{Origin:origin},body:JSON.stringify({password:'wrong'})});assert.equal(wrong.status,401);
+  const preflight=await fetch(url+'/api/tours',{method:'OPTIONS',headers:{Origin:origin}});assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-origin'),origin);
+  assert.equal((await fetch(url+'/api/tours',{method:'OPTIONS',headers:{Origin:'https://untrusted.example'}})).status,403);
+  const login=await fetch(url+'/api/login',{method:'POST',headers:{Origin:origin},body:JSON.stringify({password:'2026'})});assert.equal(login.status,200);assert.equal(login.headers.get('set-cookie'),null);const {token}=await login.json();assert.ok(token);
+  const response=await fetch(url+'/api/playbook',{headers:{Origin:origin,Authorization:'Bearer '+token}});assert.equal(response.status,502);assert.match((await response.json()).error,/NOTION_TOKEN/);
+  assert.equal((await fetch(url+'/api/tours',{headers:{Origin:origin,Authorization:'Bearer '+token+'x'}})).status,401);
+  assert.equal((await fetch(url+'/api/tours',{headers:{Cookie:'tour_session='+token}})).status,401);
+  assert.equal((await fetch(url+'/api/tours',{headers:{Origin:'https://untrusted.example',Authorization:'Bearer '+token}})).status,403);
+ }finally{await new Promise(r=>server.close(r));}
 });
 
 test('実施概要はプロンプト内の言及を除外し、正式見出しの2つのコールアウトだけを取得',()=>{

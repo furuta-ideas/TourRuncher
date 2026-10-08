@@ -1,6 +1,6 @@
 import { initialTour, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory, orderedProperties, RecentCache } from './lib.mjs';
 const $ = id => document.getElementById(id);
-const apiBase=location.hostname==='furuta-ideas.github.io'?'https://tourruncher.onrender.com':'';
+const apiBase='https://tourruncher.onrender.com';
 let accessToken='';
 function saved(key,fallback){try{return JSON.parse(localStorage.getItem(key)) || fallback;}catch{return fallback;}}
 function save(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{}}
