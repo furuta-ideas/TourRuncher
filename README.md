@@ -2,6 +2,10 @@
 
 柏の葉スマートシティツアーズのスタッフ向けHTML5 Webアプリ。
 
+公開URL： https://tourruncher.onrender.com/
+
+Renderの無料Webサービスで配信。自動公開はGitHubの検証成功後に実行する設定。
+
 ## 起動
 
 Node.js 22以降。外部npm依存なし。
