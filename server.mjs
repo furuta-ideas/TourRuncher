@@ -76,7 +76,7 @@ async function tours() {
 }
 function json(res,status,data) { res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}); res.end(JSON.stringify(data)); }
 async function body(req) { let text=''; for await(const chunk of req) { text+=chunk; if(text.length>2048) throw new Error('入力が長すぎます。'); } return JSON.parse(text || '{}'); }
-const publicFiles = { '/':'index.html', '/app.js':'app.js', '/style.css':'style.css', '/lib.mjs':'../lib.mjs', '/opening.png':'opening.png', '/favicon.svg':'favicon.svg' };
+const publicFiles = { '/':'index.html', '/app.js':'app.js', '/style.css':'style.css', '/lib.mjs':'../lib.mjs', '/opening.png':'opening.png', '/favicon.svg':'favicon.svg', '/icon.png':'icon.png' };
 const types={ html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',png:'image/png',svg:'image/svg+xml' };
 export const server = http.createServer(async(req,res) => {
   res.setHeader('X-Content-Type-Options','nosniff'); res.setHeader('Referrer-Policy','no-referrer');

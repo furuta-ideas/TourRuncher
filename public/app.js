@@ -50,7 +50,7 @@ document.querySelectorAll('[role=tab]').forEach((b,index,buttons)=>{
 const image=$('opening').querySelector('img');
 async function opening() {
   await Promise.race([image.decode().catch(()=>{}),new Promise(r=>setTimeout(r,3000))]);
-  await new Promise(r=>setTimeout(r,5000));$('opening').classList.add('fade');
+  await new Promise(r=>setTimeout(r,3000));$('opening').classList.add('fade');
   await new Promise(r=>setTimeout(r,800));$('opening').hidden=true;$('login').hidden=false;$('password').focus();
 }
 opening();
