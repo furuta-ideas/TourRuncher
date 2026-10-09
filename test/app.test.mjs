@@ -5,19 +5,21 @@ import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overvi
 import { server } from '../server.mjs';
 
 test('キャンセル案件をAPI一覧とキャッシュ表示・中央選択から除外',()=>{
-  const make=(id,date,status)=>({id,date,minute:600,title:id,properties:{Status:status}});
-  const rows=[make('cancelled','2026-10-09','キャンセル'),make('active','2026-10-10','準備中'),make('past','2026-10-08','完了')];
+  const make=(id,date,status,category='公式ツアー')=>({id,date,minute:600,title:id,properties:{Status:status,Select:category}});
+  const rows=[make('cancelled','2026-10-09','X.キャンセル'),make('active','2026-10-10','A.実施準備中'),make('past','2026-10-08','Z.終了','＋Onツアー'),make('knowledge','2026-10-09','Z.終了','ナレッジ'),make('planning','2026-10-09','Z.終了','企画'),make('pr','2026-10-09','Z.終了','ＰＲ'),make('empty','2026-10-09','Z.終了',''),make('cancelled-on','2026-10-09','X.キャンセル','＋Onツアー')];
   assert.deepEqual(rows.filter(visibleTour).map(t=>t.id),['active','past']);
   const ordered=orderTours(rows);
   assert.equal(ordered[initialTour(ordered,'2026-10-09')].id,'active');
   assert.deepEqual(orderTours([rows[0]]),[]);
   assert.equal(visibleTour(make('spaced','2026-10-09',' キャンセル　')),false);
-  assert.equal(visibleTour({properties:{ステータス:'キャンセル'}}),false);
-  assert.equal(visibleTour({properties:{}}),true);
+  assert.equal(visibleTour(make('plain','2026-10-09','キャンセル')),false);
+  assert.equal(visibleTour(make('wide','2026-10-09',' Ｘ．キャンセル　')),false);
+  assert.equal(visibleTour({properties:{Select:'公式ツアー',ステータス:'X.キャンセル'}}),false);
+  assert.equal(visibleTour({properties:{}}),false);
 });
 
 test('本日の最も早い時間枠、最も近い未来、未来がない場合',()=>{
-  const make=(title,time)=>tour({id:title,url:'https://www.notion.so/test',properties:{案件:{type:'title',title:[{plain_text:title}]},時間枠:{type:'rich_text',rich_text:[{plain_text:time}]}}});
+  const make=(title,time)=>tour({id:title,url:'https://www.notion.so/test',properties:{Select:{type:'select',select:{name:'公式ツアー'}},案件:{type:'title',title:[{plain_text:title}]},時間枠:{type:'rich_text',rich_text:[{plain_text:time}]}}});
   const rows=orderTours([make('20261008 午後','１４：００～１６：００'),make('20261009 翌日','9:00'),make('20261007 過去','10:00'),make('20261008 朝','９：３０〜１１：３０')]);
   assert.equal(rows[initialTour(rows,'2026-10-08')].title,'20261008 朝');
   assert.equal(rows[initialTour(rows,'2026-10-09')].title,'20261009 翌日');
