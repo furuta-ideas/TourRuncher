@@ -1,4 +1,4 @@
-import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, materialRows, contentMaterials, troubleSections } from './lib.mjs';
+import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, materialRows, contentMaterials, troubleSections, receiveDownload } from './lib.mjs';
 const $ = id => document.getElementById(id);
 const apiBase='https://tourruncher.onrender.com';
 let accessToken='';
@@ -120,13 +120,36 @@ function materialIcon(type){
  else{const img=el('img');img.src=`./logos/${type}.png`;img.alt='';icon.classList.add('supplied-logo');icon.append(img);}
  return icon;
 }
-function downloadMaterial(item,button){
- const en=contentLanguage==='en';
+let activeDownload=null,downloadUrl=null;
+function releaseDownload(){if(downloadUrl){URL.revokeObjectURL(downloadUrl);downloadUrl=null;}$('download-save').removeAttribute('href');}
+$('download-close').addEventListener('click',()=>{$('download-dialog').close();releaseDownload();});
+$('download-cancel').addEventListener('click',()=>activeDownload?.abort());
+$('download-dialog').addEventListener('cancel',e=>{if(activeDownload){e.preventDefault();activeDownload.abort();}else releaseDownload();});
+async function downloadMaterial(item,button){
+ const en=contentLanguage==='en',dialog=$('download-dialog'),bar=$('download-progress'),text=$('download-state');
+ if(activeDownload){if(!dialog.open)dialog.showModal();return;}
  if(!accessToken){$('material-status').textContent=en?'Please log in again.':'再度ログインしてください。';return;}
- const form=el('form');form.method='POST';form.action=apiBase+'/api/material/'+encodeURIComponent(item.id);form.target='_blank';form.rel='noopener';form.hidden=true;
- const token=el('input');token.type='hidden';token.name='token';token.value=accessToken;form.append(token);document.body.append(form);form.submit();form.remove();
- $('material-status').textContent=en?'Download requested. Check your browser downloads.':'ダウンロードを開始します。ブラウザのダウンロード一覧をご確認ください。';
- button.disabled=true;setTimeout(()=>{button.disabled=false;},1500);
+ releaseDownload();const controller=new AbortController();activeDownload=controller;button.disabled=true;
+ $('download-heading').textContent=en?'Starting download':'ダウンロードを開始します';$('download-filename').textContent=item.name;
+ bar.removeAttribute('value');text.textContent=en?'Preparing file…':'ファイルを準備しています…';
+ $('download-cancel').hidden=false;$('download-close').hidden=true;$('download-save').hidden=true;
+ $('download-cancel').textContent=en?'Cancel':'中止';$('download-close').textContent=en?'Close':'閉じる';$('download-save').textContent=en?'Save file':'保存する';
+ if(!dialog.open)dialog.showModal();
+ try{
+  const response=await fetch(apiBase+'/api/material/'+encodeURIComponent(item.id),{headers:{Authorization:'Bearer '+accessToken},cache:'no-store',signal:controller.signal});
+  if(!response.ok){const data=await response.json();throw new Error(data.error || 'Download failed');}
+  let lastPaint=0;
+  const blob=await receiveDownload(response,(received,total)=>{
+   const now=performance.now();if(received && received!==total && now-lastPaint<100)return;lastPaint=now;
+   const mb=n=>(n/1024/1024).toFixed(1)+' MB';
+   if(total){const percent=Math.min(100,received/total*100);bar.value=percent;text.textContent=Math.floor(percent)+'%  ('+mb(received)+' / '+mb(total)+')';}
+   else{bar.removeAttribute('value');text.textContent=(en?'Receiving: ':'受信中：')+mb(received);}
+  });
+  downloadUrl=URL.createObjectURL(blob);const save=$('download-save');save.href=downloadUrl;save.download=item.name || 'download';save.hidden=false;save.click();bar.value=100;
+  $('download-heading').textContent=en?'File received':'ファイルを受信しました';text.textContent=en?'Check browser downloads. If saving did not start, choose Save file.':'ブラウザのダウンロード一覧をご確認ください。保存が始まらない場合は「保存する」を押してください。';
+  $('material-status').textContent=en?'File received.':'ファイルを受信しました。';
+ }catch(error){$('download-heading').textContent=controller.signal.aborted?(en?'Download cancelled':'ダウンロードを中止しました'):(en?'Download failed':'ダウンロードできませんでした');text.textContent=controller.signal.aborted?'':error.message;bar.removeAttribute('value');}
+ finally{activeDownload=null;button.disabled=false;$('download-cancel').hidden=true;$('download-close').hidden=false;}
 }
 
 function drawMaterials(){

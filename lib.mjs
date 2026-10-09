@@ -81,6 +81,15 @@ export function filterFAQCategory(rows,name){return rows.filter(r=>(r.tags || []
 
 export function orderedProperties(properties){const first=['Select','Status','会場','時間枠','人数','主担当','副担当'];return [...first,...Object.keys(properties).filter(k=>!first.includes(k))].filter(k=>!['案件','調整進捗'].includes(k) && properties[k]).map(k=>[k,properties[k]]);}
 export const materialRows=[['lecture','座学','Presentation'],['walk','街歩き','Walking tour'],['full','フルパッケージ','Full package'],['handout','配布用','Handouts'],['menti','Mentimeter','Mentimeter'],['video','動画','Videos'],['script','スクリプト','Script'],['faq','FAQ','FAQ']];
+export async function receiveDownload(response,onProgress){
+ if(!response.body)throw new Error('ファイルを受信できません。');
+ const total=Number(response.headers.get('content-length')) || 0;
+ const reader=response.body.getReader(),chunks=[];let received=0;onProgress(0,total);
+ try{while(true){const {done,value}=await reader.read();if(done)break;chunks.push(value);received+=value.byteLength;onProgress(received,total);}}
+ finally{reader.releaseLock();}
+ if(total && received!==total)throw new Error('ファイルの受信が途中で終了しました。再度お試しください。');
+ return new Blob(chunks,{type:response.headers.get('content-type') || 'application/octet-stream'});
+}
 export function contentMaterials(nodes=[]) {
  const result=Object.fromEntries(materialRows.map(([id])=>[id,{ja:[],en:[]}]));
  function walk(items,language='ja',context='') {

@@ -118,3 +118,15 @@ nav button span{font-size:16px}
 #panel-prep .property dt{margin:0;white-space:nowrap;line-height:1.4}
 #panel-prep .property dt::after{content:'：'}
 #panel-prep .property dd{display:block;min-width:0;margin:0;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset}
+
+/* Compact horizontal file labels and live download progress. */
+#app .materials-table .material-control{flex-direction:row;justify-content:flex-start;text-align:left;gap:8px;padding:3px 6px;margin:2px 0}
+#app .materials-table td{padding:6px 10px}
+#app .material-icon{flex:0 0 40px;width:40px;height:40px}
+#app .materials-table .material-filename{font-size:8pt!important;line-height:1.4;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:normal}
+#download-dialog{width:min(520px,calc(100% - 32px));padding:24px}
+#download-dialog #download-filename{font-size:10pt;overflow-wrap:anywhere;line-height:1.5}
+#download-progress{display:block;width:100%;height:22px;accent-color:#285cd3;margin:18px 0 12px}
+#download-state{min-height:48px;font-size:12pt;line-height:1.5}
+.download-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+@media(max-width:650px){#app .materials-table td{padding:5px 4px}#app .materials-table .material-control{gap:5px;padding:2px}#app .material-icon{flex-basis:32px;width:32px;height:32px}}

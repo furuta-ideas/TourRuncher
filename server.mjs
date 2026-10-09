@@ -19,7 +19,7 @@ async function downloadMaterial(id,res){
  if(!materialFiles.has(id))registerMaterials(await sections());
  const item=materialFiles.get(id);
  if(!item)return json(res,404,{error:'コンテンツが見つかりません。アプリを開き直してください。'});
- const latest=compact(await notion('blocks/'+id));
+ const latest=Date.parse(item.expiresAt)>Date.now()+60000?item:compact(await notion('blocks/'+id));
  const url=new URL(latest.url || item.url);
  if(url.protocol!=='https:' || !/(^|\.)amazonaws\.com$|(^|\.)notion-static\.com$/.test(url.hostname))return json(res,400,{error:'このファイルはダウンロードに対応していません。'});
  const response=await fetch(url,{signal:AbortSignal.timeout(3600000),redirect:'error'});
@@ -63,7 +63,7 @@ function compact(b) {
   const data = b[b.type] || {};
   const file = data.file || data.external;
   return { id: b.id, type: b.type, text: plain(data.rich_text || []), rich: (data.rich_text || []).map(x => ({text:x.plain_text ?? x.text?.content ?? '', href:x.href ?? x.text?.link?.url ?? null, bold:!!x.annotations?.bold, color:x.annotations?.color || 'default', italic:!!x.annotations?.italic, underline:!!x.annotations?.underline, strike:!!x.annotations?.strikethrough})),
-    color:data.color || 'default', icon:data.icon?.emoji || '', url: file?.url || data.url || null, caption: plain(data.caption || []), name:data.name || '', cells: data.cells?.map(plain), checked: data.checked, children: [] };
+    color:data.color || 'default', icon:data.icon?.emoji || '', url: file?.url || data.url || null, expiresAt:file?.expiry_time || null, caption: plain(data.caption || []), name:data.name || '', cells: data.cells?.map(plain), checked: data.checked, children: [] };
 }
 async function tree(blocks, depth=0) {
   const nodes = [];

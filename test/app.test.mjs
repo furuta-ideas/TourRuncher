@@ -1,8 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, contentMaterials, materialRows, troubleSections } from '../lib.mjs';
+import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, contentMaterials, materialRows, troubleSections, receiveDownload } from '../lib.mjs';
 import { server } from '../server.mjs';
+
+test('ダウンロード進捗は実受信量を示し、途中終了は完了扱いにしない',async()=>{
+ const bytes=new TextEncoder();const updates=[];
+ const stream=new ReadableStream({start(c){c.enqueue(bytes.encode('abc'));c.enqueue(bytes.encode('def'));c.close();}});
+ const result=await receiveDownload(new Response(stream,{headers:{'Content-Length':'6'}}),(received,total)=>updates.push([received,total]));
+ assert.equal(await result.text(),'abcdef');assert.deepEqual(updates,[[0,6],[3,6],[6,6]]);
+ await assert.rejects(receiveDownload(new Response('short',{headers:{'Content-Length':'10'}}),()=>{}),/途中/);
+ const unknown=[];await receiveDownload(new Response('abc'),(received,total)=>unknown.push([received,total]));assert.deepEqual(unknown.at(-1),[3,0]);
+});
 
 test('コンテンツを指定順の日本語・英語表へ分類し、英語スクリプト等は空欄',()=>{
  const file=name=>({type:'file',name,url:'https://files.example/'+encodeURIComponent(name)});
