@@ -1,4 +1,4 @@
-import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache } from './lib.mjs';
+import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, materialRows, contentMaterials, troubleSections } from './lib.mjs';
 const $ = id => document.getElementById(id);
 const apiBase='https://tourruncher.onrender.com';
 let accessToken='';
@@ -71,6 +71,7 @@ $('login-form').addEventListener('submit',async e=>{
 function positionTour(index) {
   const item=$('tour-list').children[index];if(item)$('tour-list').scrollTop=item.offsetTop-($('tour-list').clientHeight-item.offsetHeight)/2;
 }
+new ResizeObserver(()=>{const list=$('tour-list');if(list.clientHeight){list.style.setProperty('--row',list.clientHeight/3+'px');if(state.selected>=0)positionTour(state.selected);}}).observe($('tour-list'));
 async function selectTour(index) {
   let t=state.tours[index];if(!t || state.selected===index)return;let cached=recent.get(t.id);if(!cached?.overview)cached=null;if(t.cached && cached)t=cached.tour;recent.set(t.id,cached || {tour:t,overview:null});save('tour-recent-v2',recent.serialize());
   state.selected=index;const seq=++state.detailSequence;
@@ -112,15 +113,59 @@ function copyRow(text,value=text) {
   row.append(el('p',text),button);return row;
 }
 function displaySection(target,node) {target.replaceChildren();if(node)renderBlocks(node.children,target);else target.append(el('p','Playbookに該当する情報が見つかりません。','hint'));}
+let materialNode=null,contentLanguage='ja';
+function materialIcon(type){
+ const icon=el('span',null,'material-icon '+type);icon.setAttribute('aria-hidden','true');
+ if(type==='youtube')icon.append(el('span','▶'));
+ else if(type==='mentimeter'){for(const height of [12,25,18,32]){const bar=el('i');bar.style.height=height+'px';icon.append(bar);}}
+ else icon.append(el('span',type==='ppt'?'P':'X'));
+ return icon;
+}
+async function downloadMaterial(item,button){
+ const en=contentLanguage==='en',status=$('material-status');button.disabled=true;
+ status.textContent=en?'Downloading…':'ダウンロード中…';
+ try{
+  const response=await fetch(apiBase+'/api/material/'+encodeURIComponent(item.id),{headers:{Authorization:'Bearer '+accessToken},cache:'no-store'});
+  if(!response.ok){const data=await response.json();throw new Error(data.error || 'Download failed');}
+  const blob=await response.blob();const url=URL.createObjectURL(blob);const a=el('a');a.href=url;a.download=item.name || 'download';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  status.textContent=en?'Download ready. Open the saved file to use it.':'ダウンロードを開始しました。保存したファイルを開いてご利用ください。';
+ }catch(error){status.textContent=(en?'Download failed: ':'ダウンロードできませんでした：')+error.message;}
+ finally{button.disabled=false;}
+}
+function drawMaterials(){
+ const en=contentLanguage==='en',target=$('materials');target.replaceChildren();
+ $('content-heading').textContent=en?'Tour content':'ツアーコンテンツ';
+ $('menti-launch-label').textContent=en?'Open Mentimeter':'Mentimeterを開く';
+ const mentiIcon=$('menti-launch').querySelector('.menti-icon');if(mentiIcon)mentiIcon.replaceChildren(materialIcon('mentimeter'));
+ for(const b of $('menti-info').querySelectorAll('.copy-row button'))b.textContent=en?'Copy':'コピー';
+ for(const p of $('menti-info').querySelectorAll('.copy-row p'))p.textContent=p.textContent.replace(en?/^パスワード：/:/^Password: /,en?'Password: ':'パスワード：');
+ const usage=$('menti-info').querySelector('summary');if(usage)usage.textContent=en?'Instructions':'使い方';
+ for(const lang of ['ja','en'])$('content-lang-'+lang).setAttribute('aria-pressed',String(contentLanguage===lang));
+ if(!materialNode){target.append(el('p',en?'Loading content…':'コンテンツを取得しています…','loading'));return;}
+ const matrix=contentMaterials(materialNode.children),table=el('table',null,'materials-table');table.setAttribute('aria-label',en?'Tour downloads':'ツアーコンテンツ一覧');
+ const head=el('thead'),hr=el('tr');for(const title of [en?'Content':'内容',en?'Japanese tour':'日本語ツアー',en?'English tour':'英語ツアー']){const th=el('th',title);th.scope='col';hr.append(th);}head.append(hr);table.append(head);const body=el('tbody');
+ for(const [id,ja,english] of materialRows){const row=el('tr'),heading=el('th',en?english:ja);heading.scope='row';row.append(heading);
+  for(const lang of ['ja','en']){const cell=el('td');
+   if(id==='menti' && lang==='ja'){const a=link($('menti-launch').href,en?'Open':'開く','material-control');a.replaceChildren(materialIcon('mentimeter'),el('span',en?'Open':'開く'));a.setAttribute('aria-label',en?'Open Mentimeter':'Mentimeterを開く');cell.append(a);}
+   else{const items=matrix[id][lang];if(!items.length)cell.append(el('span','ー','material-empty'));
+    for(const item of items){const button=el('button',null,'material-control');button.type='button';button.title=item.name;button.setAttribute('aria-label',`${item.name} ${en?'Download':'ダウンロード'}`);const type=id==='video'?'youtube':/\.(xlsx?|csv)$/i.test(item.name)?'excel':'ppt';button.append(materialIcon(type),el('span',item.reference?(en?'Reference video':'参考動画'):(en?'Download':'ダウンロード')));button.addEventListener('click',()=>downloadMaterial(item,button));cell.append(button);}
+   }row.append(cell);
+  }body.append(row);
+ }table.append(body);const wrap=el('div',null,'materials-wrap');wrap.append(table);target.append(wrap);
+ const note=el('p',en?'English scripts are in the PowerPoint speaker notes.':'英語版のスクリプトはPPTのメモ欄にあります。','hint');target.append(note);
+ const advice=materialNode.text?.split('\n').slice(1).join('\n');if(advice)target.append(el('p',en?'Use the customized files for each tour when provided.':advice,'hint'));
+}
+for(const lang of ['ja','en'])$('content-lang-'+lang).addEventListener('click',()=>{contentLanguage=lang;$('material-status').textContent='';drawMaterials();});
 async function loadPlaybook(){
   try{
     const nodes=(await api('/api/playbook')).sections;
-    displaySection($('materials'),section(nodes,/コンテンツ/));renderTroubles(section(nodes,/トラブル/));displaySection($('contacts'),section(nodes,/緊急連絡先/));
+    materialNode=section(nodes,/コンテンツ/);renderTroubles(section(nodes,/トラブル/));displaySection($('contacts'),section(nodes,/緊急連絡先/));
     const menti=section(nodes,/Mentimeter/i);$('menti-info').replaceChildren();
     if(menti){const texts=flatten(menti.children).map(n=>n.text).filter(Boolean);const all=texts.join('\n');const mail=all.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];const pwd=all.match(/(?:Pwd|Password|パスワード|PWD)\s*[：:]\s*([^\s]+)/i)?.[1];if(mail)$('menti-info').append(copyRow(`ID：${mail}`,mail));if(pwd)$('menti-info').append(copyRow(`パスワード：${pwd}`,pwd));
       if(!mail || !pwd)$('menti-info').append(el('p','ログイン情報を確認してください。','hint'));const d=el('details');d.append(el('summary','使い方'));renderBlocks(menti.children,d);$('menti-info').append(d);
       const u=flatten(menti.children).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://www.mentimeter.com'));if(u)$('menti-launch').href=u.href;
     }else $('menti-info').append(el('p','PlaybookにMentimeterの情報が見つかりません。','hint'));
+    drawMaterials();
     const faq=section(nodes,/ＦＡＱアプリ|FAQアプリ/);
     if(faq){const url=flatten(faq.children).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://'));if(url)$('faq-master').href=url.href;}
     $('faq-master').href||= 'https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/';
@@ -149,13 +194,6 @@ async function loadCategories(){try{const data=await api('/api/faq');state.faq=d
 
 function renderTroubles(node){
  const target=$('troubles');target.replaceChildren();if(!node){displaySection(target,null);return;}
- const hasImage=n=>n.type==='image' || (n.children || []).some(hasImage);
- const unwrap=ns=>ns.flatMap(n=>['synced_block','column_list','column'].includes(n.type)?unwrap(n.children || []):[n]);
- const nodes=unwrap(node.children || []);let card=null;let grid=null;
- for(const n of nodes){
-  if(hasImage(n)){if(!grid){grid=el('div',null,'trouble-guides');target.append(grid);}card=el('article',null,'trouble-guide');grid.append(card);renderBlocks([n],card);}
-  else if(grid && n.type!=='table'){renderBlocks([n],card);}
-  else{renderBlocks([n],target);}
- }
- if(grid){const gap=(3-grid.children.length%3)%3;for(let i=0;i<gap;i++){const reserve=el('div',null,'trouble-reserve');reserve.setAttribute('aria-hidden','true');grid.append(reserve);}}
+ const {main,guides}=troubleSections(node.children || []);renderBlocks(main,target);
+ if(guides.length){const grid=el('div',null,'trouble-guides');for(const group of guides){const card=el('article',null,'trouble-guide');renderBlocks(group,card);grid.append(card);}const gap=(3-grid.children.length%3)%3;for(let i=0;i<gap;i++){const reserve=el('div',null,'trouble-reserve');reserve.setAttribute('aria-hidden','true');grid.append(reserve);}target.append(grid);}
 }

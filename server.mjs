@@ -1,5 +1,7 @@
 import http from 'node:http';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { plain, tour, orderTours, parseFAQ, overviewBlocks, redactOverview } from './lib.mjs';
 
 const env = process.env;
@@ -8,6 +10,24 @@ const master = env.FAQ_MASTER_URL || 'https://furuta-ideas.github.io/kashiwanoha
 const pageId = env.PLAYBOOK_ID || '2d2cbc412aed8006b7bbf5b2a26b018a';
 const sourceId = env.TOUR_SOURCE_ID || '284cbc41-2aed-8052-84c5-000b8c68d91c';
 const attempts = new Map();
+const materialFiles=new Map();
+function registerMaterials(nodes){
+ function scan(items,inContent=false){for(const n of items){const allowed=inContent || (n.type==='toggle' && /コンテンツ/.test(n.text || ''));if(allowed && ['file','video','audio','pdf'].includes(n.type) && n.url)materialFiles.set(n.id,n);scan(n.children || [],allowed);}}
+ scan(nodes);
+}
+async function downloadMaterial(id,res){
+ if(!materialFiles.has(id))registerMaterials(await sections());
+ const item=materialFiles.get(id);
+ if(!item)return json(res,404,{error:'コンテンツが見つかりません。アプリを開き直してください。'});
+ const latest=compact(await notion('blocks/'+id));
+ const url=new URL(latest.url || item.url);
+ if(url.protocol!=='https:' || !/(^|\.)amazonaws\.com$|(^|\.)notion-static\.com$/.test(url.hostname))return json(res,400,{error:'このファイルはダウンロードに対応していません。'});
+ const response=await fetch(url,{signal:AbortSignal.timeout(300000),redirect:'error'});
+ if(!response.ok || !response.body)return json(res,502,{error:'ファイルを取得できません。しばらくしてから再度お試しください。'});
+ const filename=latest.name || item.name || decodeURIComponent(url.pathname.split('/').pop()) || 'download';
+ res.writeHead(200,{'Content-Type':response.headers.get('content-type') || 'application/octet-stream','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(filename).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16))}`,'Cache-Control':'no-store',...(response.headers.get('content-length')?{'Content-Length':response.headers.get('content-length')}:{})});
+ await pipeline(Readable.fromWeb(response.body),res);
+}
 const sign = text => createHmac('sha256', secret).update(text).digest('base64url');
 const equal = (a,b) => Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b));
 function authenticated(req) {
@@ -105,7 +125,9 @@ export const server = http.createServer(async(req,res) => {
       if(!authenticated(req)) return json(res,401,{error:'パスワードを入力してください。'});
       if(req.method!=='GET') return json(res,405,{error:'この操作は使用できません。'});
       if(url.pathname==='/api/roles') return json(res,200,{sections:await sections(/役割分担.*事前準備/)});
-      if(url.pathname==='/api/playbook') return json(res,200,{sections:await sections()});
+      if(url.pathname==='/api/playbook'){const nodes=await sections();registerMaterials(nodes);return json(res,200,{sections:nodes});}
+      const materialId=url.pathname.match(/^\/api\/material\/([0-9a-f-]{32,36})$/i)?.[1];
+      if(materialId)return await downloadMaterial(materialId,res);
       if(url.pathname==='/api/tours') return json(res,200,{tours:await tours()});
       if(url.pathname==='/api/faq') {
         const response=await fetch(master,{cache:'no-store',signal:AbortSignal.timeout(20000),headers:{'Cache-Control':'no-cache'}});
@@ -127,6 +149,6 @@ export const server = http.createServer(async(req,res) => {
       return json(res,404,{error:'ページが見つかりません。'});
     }
     return json(res,404,{error:'Not found'});
-  } catch(error) { json(res,502,{error:error.name==='TimeoutError'?'接続がタイムアウトしました。アプリを開き直してください。':error.message}); }
+  } catch(error) { if(res.headersSent){res.destroy(error);return;}json(res,502,{error:error.name==='TimeoutError'?'接続がタイムアウトしました。アプリを開き直してください。':error.message}); }
 });
-if(process.argv[1] && new URL(import.meta.url).pathname.endsWith(process.argv[1].replaceAll('\\','/').split('/').pop())) server.listen(Number(env.PORT)||3000,'0.0.0.0',()=>console.log(`TourRuncher API listening on ${Number(env.PORT)||3000}`));
+if(process.argv[1] && new URL(import.meta.url).pathname.endsWith(process.argv[1].replaceAll('\\','/').split('/').pop())) server.listen(Number(env.PORT)||3000,'0.0.0.0',()=>console.log(`Tour PlayBook API listening on ${Number(env.PORT)||3000}`));

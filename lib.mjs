@@ -80,6 +80,41 @@ export function faqCategories(rows) {
 export function filterFAQCategory(rows,name){return rows.filter(r=>(r.tags || []).some(t=>normalize(t)===normalize(name))).sort((a,b)=>(a.id || 0)-(b.id || 0));}
 
 export function orderedProperties(properties){const first=['Select','Status','会場','時間枠','人数','主担当','副担当'];return [...first,...Object.keys(properties).filter(k=>!first.includes(k))].filter(k=>!['案件','調整進捗'].includes(k) && properties[k]).map(k=>[k,properties[k]]);}
+export const materialRows=[['lecture','座学','Presentation'],['walk','街歩き','Walking tour'],['full','フルパッケージ','Full package'],['handout','配布用','Handouts'],['menti','Mentimeter','Mentimeter'],['video','動画','Videos'],['script','スクリプト','Script'],['faq','FAQ','FAQ']];
+export function contentMaterials(nodes=[]) {
+ const result=Object.fromEntries(materialRows.map(([id])=>[id,{ja:[],en:[]}]));
+ function walk(items,language='ja',context='') {
+  for(const n of items){
+   const lang=/英語|English/i.test(n.text || '')?'en':/日本語|Japanese/i.test(n.text || '')?'ja':language;
+   let filename=n.name || n.caption || '';try{filename ||= decodeURIComponent(new URL(n.url).pathname.split('/').pop());}catch{}
+   const name=(filename || n.text || '').normalize('NFKC');
+   if(n.url && ['file','video','audio','pdf','bookmark','embed','link_preview'].includes(n.type)) {
+    const row=/配布|handout/i.test(name)?'handout':/スクリプト|script/i.test(name)?'script':/FAQ/i.test(name)?'faq':/座学|lecture|presentation/i.test(name)?'lecture':/街歩き|walking/i.test(name)?'walk':/フルパッケージ|full.package/i.test(name)?'full':n.type==='video' || /\.(mp4|mov|webm)$/i.test(name) || /youtu(?:\.be|be\.com)/i.test(n.url)?'video':null;
+    const actual=/英語|English/i.test(name)?'en':/日本語|Japanese/i.test(name)?'ja':lang;
+    if(row)result[row][actual].push({...n,name:filename || n.text || row,reference:/参考/.test(context)});
+   }
+   walk(n.children || [],lang,context+' '+(n.text || ''));
+  }
+ }
+ walk(nodes);return result;
+}
+export function troubleSections(nodes=[]) {
+ const main=[],guides=[];let card=null,afterDivider=false;
+ const split=()=>{card=null;afterDivider=guides.length>0;};
+ function visit(n){
+  if(['synced_block','column_list','column'].includes(n.type)){for(const c of n.children || [])visit(c);return;}
+  if(n.type==='divider'){split();return;}
+  const descendants=n.children || [];
+  const containsImage=x=>x.type==='image' || (x.children || []).some(containsImage);
+  if(n.type==='table' && !card){main.push(n);return;}
+  if(containsImage(n) || card || afterDivider){
+   if(!card){card=[];guides.push(card);afterDivider=false;}
+   if(descendants.some(x=>x.type==='divider')){card.push({...n,children:[]});for(const c of descendants)visit(c);}
+   else card.push(n);
+  }else main.push(n);
+ }
+ nodes.forEach(visit);return {main,guides};
+}
 export class RecentCache {
  constructor(limit=10,entries=[]){this.limit=limit;this.entries=new Map(entries.slice(-limit));}
  get(key){const value=this.entries.get(key);if(value!==undefined){this.entries.delete(key);this.entries.set(key,value);}return value;}

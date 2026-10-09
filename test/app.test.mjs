@@ -1,8 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache } from '../lib.mjs';
+import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, contentMaterials, materialRows, troubleSections } from '../lib.mjs';
 import { server } from '../server.mjs';
+
+test('コンテンツを指定順の日本語・英語表へ分類し、英語スクリプト等は空欄',()=>{
+ const file=name=>({type:'file',name,url:'https://files.example/'+encodeURIComponent(name)});
+ const rows=contentMaterials([{type:'callout',text:'日本語ツアー',children:[file('座学_日本語版.pptx'),file('街歩き_日本語版.pptx'),file('フルパッケージ_日本語版.pptx'),file('スクリプト_日本語版.xlsx'),file('ＦＡＱ_日本語版.xlsx'),{type:'video',url:'https://files.example/concept.mp4'},{type:'toggle',text:'参考動画',children:[{type:'video',url:'https://files.example/reference.mp4'}]}]},{type:'callout',text:'英語ツアー',children:[file('座学_英語版.pptx'),file('紹介_英語版.mp4'),{type:'paragraph',text:'英語版のスクリプト・FAQのEXCELはありません。'}]}]);
+ assert.deepEqual(materialRows.map(x=>x[0]),['lecture','walk','full','handout','menti','video','script','faq']);
+ assert.equal(rows.lecture.ja.length,1);assert.equal(rows.lecture.en.length,1);
+ assert.equal(rows.video.ja.length,2);assert.equal(rows.video.ja[1].reference,true);assert.equal(rows.video.en.length,1);
+ assert.equal(rows.script.en.length,0);assert.equal(rows.faq.en.length,0);assert.equal(rows.handout.ja.length,0);assert.equal(rows.faq.ja.length,1);
+});
+test('ネストした区切り線で集合場所とバス停車位置を別カードにする',()=>{
+ const image=id=>({type:'image',id});const table={type:'table',children:[]};
+ const result=troubleSections([table,{type:'paragraph',text:'（集合場所　案内図）',children:[image('meeting'),{type:'divider'},{type:'paragraph',text:'（運転手向け　バス停車位置）'},image('bus')]}]);
+ assert.deepEqual(result.main,[table]);assert.equal(result.guides.length,2);
+ assert.equal(result.guides[0][0].text,'（集合場所　案内図）');assert.equal(result.guides[0][1].id,'meeting');
+ assert.equal(result.guides[1][0].text,'（運転手向け　バス停車位置）');assert.equal(result.guides[1][1].id,'bus');
+});
+test('コンテンツファイルは認証後にのみ取得し、添付ファイルとしてストリーム配信',async()=>{
+ const originalFetch=globalThis.fetch,oldToken=process.env.NOTION_TOKEN;process.env.NOTION_TOKEN='test-only';
+ const id='11111111-1111-1111-1111-111111111111',toggleId='22222222-2222-2222-2222-222222222222';
+ const file={id,type:'file',file:{name:'script.xlsx',file:{url:'https://prod-files-secure.s3.us-west-2.amazonaws.com/test.xlsx'}}};
+ globalThis.fetch=async(url,options)=>{const value=String(url);if(value.startsWith('https://api.notion.com/')){if(value.includes('/blocks/'+id))return Response.json(file);return Response.json({results:value.includes(toggleId)?[file]:[{id:toggleId,type:'toggle',has_children:true,toggle:{rich_text:[{plain_text:'コンテンツ'}]}}],has_more:false});}if(value.startsWith('https://prod-files-secure.s3.us-west-2.amazonaws.com/'))return new Response('file-bytes',{headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}});return originalFetch(url,options);};
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const url='http://127.0.0.1:'+server.address().port;const origin='https://furuta-ideas.github.io';
+ try{assert.equal((await fetch(url+'/api/material/'+id)).status,401);const login=await fetch(url+'/api/login',{method:'POST',headers:{Origin:origin},body:JSON.stringify({password:'2026'})});const {token}=await login.json();const r=await fetch(url+'/api/material/'+id,{headers:{Origin:origin,Authorization:'Bearer '+token}});assert.equal(r.status,200);assert.match(r.headers.get('content-disposition'),/attachment.*script.xlsx/);assert.equal(await r.text(),'file-bytes');}
+ finally{await new Promise(r=>server.close(r));globalThis.fetch=originalFetch;if(oldToken===undefined)delete process.env.NOTION_TOKEN;else process.env.NOTION_TOKEN=oldToken;}
+});
 
 test('実施概要の個人情報は本文・リンク・子要素から除去し、他の色文字を保持',()=>{
  const normal={type:'bulleted_list_item',text:'所要時間：120分',rich:[{text:'120分',color:'pink',bold:true}]};
