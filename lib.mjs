@@ -17,7 +17,8 @@ export function tour(page) {
   const time = (properties['時間枠'] || '').normalize('NFKC').match(/(\d{1,2})[:時](\d{2})?/);
   return { id: page.id, url: page.url, title, date, minute: time ? +time[1] * 60 + +(time[2] || 0) : 1440, properties };
 }
-export const orderTours = tours => tours.filter(t => t.date).sort((a,b) => a.date.localeCompare(b.date) || a.minute - b.minute || a.title.localeCompare(b.title));
+export const visibleTour = t => (t.properties?.Status ?? t.properties?.['ステータス'] ?? '').normalize('NFKC').trim() !== 'キャンセル';
+export const orderTours = tours => tours.filter(t => t.date && visibleTour(t)).sort((a,b) => a.date.localeCompare(b.date) || a.minute - b.minute || a.title.localeCompare(b.title));
 export function initialTour(tours, today) {
   const index = tours.findIndex(t => t.date >= today);
   return index < 0 ? Math.max(0, tours.length - 1) : index;

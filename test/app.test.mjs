@@ -1,8 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { orderTours, initialTour, tour, parseFAQ, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory, orderedProperties, RecentCache } from '../lib.mjs';
+import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory, orderedProperties, RecentCache } from '../lib.mjs';
 import { server } from '../server.mjs';
+
+test('キャンセル案件をAPI一覧とキャッシュ表示・中央選択から除外',()=>{
+  const make=(id,date,status)=>({id,date,minute:600,title:id,properties:{Status:status}});
+  const rows=[make('cancelled','2026-10-09','キャンセル'),make('active','2026-10-10','準備中'),make('past','2026-10-08','完了')];
+  assert.deepEqual(rows.filter(visibleTour).map(t=>t.id),['active','past']);
+  const ordered=orderTours(rows);
+  assert.equal(ordered[initialTour(ordered,'2026-10-09')].id,'active');
+  assert.deepEqual(orderTours([rows[0]]),[]);
+  assert.equal(visibleTour(make('spaced','2026-10-09',' キャンセル　')),false);
+  assert.equal(visibleTour({properties:{ステータス:'キャンセル'}}),false);
+  assert.equal(visibleTour({properties:{}}),true);
+});
 
 test('本日の最も早い時間枠、最も近い未来、未来がない場合',()=>{
   const make=(title,time)=>tour({id:title,url:'https://www.notion.so/test',properties:{案件:{type:'title',title:[{plain_text:title}]},時間枠:{type:'rich_text',rich_text:[{plain_text:time}]}}});
