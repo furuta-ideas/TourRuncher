@@ -79,7 +79,7 @@ async function selectTour(index) {
   $('tour-link').href=t.url;$('tour-link').hidden=false;
   const dl=el('dl',null,'properties');
   for(const [k,v] of orderedProperties(t.properties)){const cell=el('div',null,'property');cell.title=`${k}：${v}`;cell.append(el('dt',k),el('dd',v));dl.append(cell);}
-  const overview=el('div',null,'notion-content');const draw=nodes=>{overview.replaceChildren();if(nodes?.length)renderBlocks(redactOverview(nodes),overview);else overview.append(el('p','実施概要の記載はありません。','hint'));};if(cached)draw(cached.overview);else overview.append(el('p','実施概要を取得しています…','loading'));
+  const overview=el('div',null,'notion-content');const draw=nodes=>{overview.replaceChildren();if(nodes?.length){const safe=redactOverview(nodes);renderBlocks(safe,overview);if(JSON.stringify(safe).includes("（非表示）"))overview.append(el("p","※非表示情報は「詳細を開く」で確認できます。","hint"));}else overview.append(el('p','実施概要の記載はありません。','hint'));};if(cached)draw(cached.overview);else overview.append(el('p','実施概要を取得しています…','loading'));
   $('tour-properties').replaceChildren(dl);$('tour-detail').replaceChildren(overview);
   try{const data=await api('/api/tour/'+t.id+(cached?.version && Date.now()-(cached.savedAt || 0)<45*60*1000?'?version='+encodeURIComponent(cached.version):''));
     if(data.notModified){if(recent.entries.has(t.id)){recent.entries.set(t.id,cached);save('tour-recent-v2',recent.serialize());}return;}

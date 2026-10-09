@@ -69,7 +69,7 @@ export function redactOverview(nodes=[]) {
   return nodes.map(node=>{
     const source=node.text || (node.rich || []).map(r=>r.text).join('');
     let hidden=false;
-    const text=source.split('\n').map(line=>{const match=line.match(label);if(!match)return line;hidden=true;return `${match[1]}：（非表示）「詳細を開く」で確認`;}).join('\n');
+    const text=source.split('\n').map(line=>{const match=line.match(label);if(!match)return line;hidden=true;return `${match[1]}：（非表示）`;}).join('\n');
     if(hidden)return {id:node.id,type:node.type,text,rich:[],children:[]};
     return {...node,children:redactOverview(node.children || [])};
   });

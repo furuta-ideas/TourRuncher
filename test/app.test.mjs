@@ -9,7 +9,7 @@ test('実施概要の個人情報は本文・リンク・子要素から除去�
  const nodes=[{type:'callout',children:['申し込み担当者名：テスト太郎','緊急連絡先：09012345678','連絡先Eメール：private@example.com'].map(text=>({type:'bulleted_list_item',text,rich:[{text,href:'mailto:private@example.com'}],children:[{type:'paragraph',text:'secret-child'}]})).concat(normal)}];
  const result=redactOverview(nodes);const json=JSON.stringify(result);
  for(const secret of ['テスト太郎','09012345678','private@example.com','secret-child'])assert.equal(json.includes(secret),false);
- assert.equal(result[0].children.filter(n=>n.text.includes('（非表示）「詳細を開く」で確認')).length,3);
+ assert.equal(result[0].children.filter(n=>n.text.endsWith('：（非表示）')).length,3);
  assert.deepEqual(result[0].children[3].rich,normal.rich);
  assert.equal(nodes[0].children[0].text,'申し込み担当者名：テスト太郎');
  assert.deepEqual(redactOverview(result),result);
