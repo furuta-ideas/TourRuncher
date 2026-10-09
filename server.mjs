@@ -22,10 +22,11 @@ async function downloadMaterial(id,res){
  const latest=compact(await notion('blocks/'+id));
  const url=new URL(latest.url || item.url);
  if(url.protocol!=='https:' || !/(^|\.)amazonaws\.com$|(^|\.)notion-static\.com$/.test(url.hostname))return json(res,400,{error:'このファイルはダウンロードに対応していません。'});
- const response=await fetch(url,{signal:AbortSignal.timeout(300000),redirect:'error'});
+ const response=await fetch(url,{signal:AbortSignal.timeout(3600000),redirect:'error'});
  if(!response.ok || !response.body)return json(res,502,{error:'ファイルを取得できません。しばらくしてから再度お試しください。'});
  const filename=latest.name || item.name || decodeURIComponent(url.pathname.split('/').pop()) || 'download';
- res.writeHead(200,{'Content-Type':response.headers.get('content-type') || 'application/octet-stream','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(filename).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16))}`,'Cache-Control':'no-store',...(response.headers.get('content-length')?{'Content-Length':response.headers.get('content-length')}:{})});
+ const extension=filename.match(/\.[a-z0-9]{1,8}$/i)?.[0] || '';
+ res.writeHead(200,{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename="download${extension}"; filename*=UTF-8''${encodeURIComponent(filename).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16))}`,'Cache-Control':'no-store',...(response.headers.get('content-length')?{'Content-Length':response.headers.get('content-length')}:{})});
  await pipeline(Readable.fromWeb(response.body),res);
 }
 const sign = text => createHmac('sha256', secret).update(text).digest('base64url');

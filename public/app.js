@@ -123,8 +123,7 @@ function materialIcon(type){
 function downloadMaterial(item,button){
  const en=contentLanguage==='en';
  if(!accessToken){$('material-status').textContent=en?'Please log in again.':'再度ログインしてください。';return;}
- const frame=el('iframe');frame.name='download-'+crypto.randomUUID();frame.hidden=true;frame.title=en?'File download':'ファイルのダウンロード';document.body.append(frame);setTimeout(()=>frame.remove(),600000);
- const form=el('form');form.method='POST';form.action=apiBase+'/api/material/'+encodeURIComponent(item.id);form.target=frame.name;form.hidden=true;
+ const form=el('form');form.method='POST';form.action=apiBase+'/api/material/'+encodeURIComponent(item.id);form.target='_blank';form.rel='noopener';form.hidden=true;
  const token=el('input');token.type='hidden';token.name='token';token.value=accessToken;form.append(token);document.body.append(form);form.submit();form.remove();
  $('material-status').textContent=en?'Download requested. Check your browser downloads.':'ダウンロードを開始します。ブラウザのダウンロード一覧をご確認ください。';
  button.disabled=true;setTimeout(()=>{button.disabled=false;},1500);
