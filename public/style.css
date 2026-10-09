@@ -111,3 +111,10 @@ nav button span{font-size:16px}
 .trouble-guide+.trouble-guide{border-left:3px solid #d5b8a0}
 @media(max-width:1000px){#panel-prep .tour-side{height:max(780px,calc(100dvh - 178px));grid-template-rows:minmax(0,1fr) minmax(0,2fr)}}
 @media(max-width:650px){#panel-prep .tour-side{height:auto;grid-template-rows:220px auto}#panel-prep #tour-properties{overflow:visible}#panel-prep .tour-meta{min-height:430px}#panel-prep .tour-actions{gap:20px}#panel-prep .action-icon{width:64px;height:64px}#panel-content .section-title{flex-wrap:wrap}#panel-content .section-title .language{margin-left:auto}#app .materials-table th,#app .materials-table td{padding:9px 4px}#app .materials-table th:first-child{width:30%}#app .material-control{padding:5px 2px;margin:2px}#app .material-control>span:last-child{font-size:10pt!important}#panel-content>.menti{grid-template-columns:1fr}.trouble-guides{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* One compact line per tour property. */
+#panel-prep .properties{grid-template-columns:minmax(0,1fr);gap:4px;margin:4px 0 8px}
+#panel-prep .property{display:grid;grid-template-columns:100px minmax(0,1fr);align-items:center;gap:6px;min-height:0;padding:4px 9px;border-radius:6px}
+#panel-prep .property dt{margin:0;white-space:nowrap;line-height:1.4}
+#panel-prep .property dt::after{content:'：'}
+#panel-prep .property dd{display:block;min-width:0;margin:0;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset}
