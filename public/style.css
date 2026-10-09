@@ -95,6 +95,8 @@ nav button span{font-size:16px}
 #app .material-control{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:6px 12px;margin:0 6px;background:none;text-decoration:none;color:#274773;border-radius:10px;vertical-align:middle}
 #app .material-control:hover{background:#edf3ff}
 #app .material-control:disabled{opacity:.55;cursor:wait}
+#app .materials-table .material-control{max-width:100%;margin:4px 0;width:100%;min-width:0}
+#app .material-filename{display:block;width:100%;white-space:normal;overflow-wrap:anywhere;word-break:normal;line-height:1.5}
 #app .material-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 3px 8px #182c4d26}
 #app .material-icon>span{font-size:26px!important;font-weight:900;line-height:1}
 .material-icon.ppt{background:linear-gradient(135deg,#f38a5a,#bd3e1b)}
