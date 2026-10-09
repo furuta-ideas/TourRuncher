@@ -64,6 +64,16 @@ export function overviewBlocks(nodes) {
   for(const n of nodes){const nested=overviewBlocks(n.children || []);if(nested.length)return nested;}
   return [];
 }
+export function redactOverview(nodes=[]) {
+  const label=/^\s*(?:[•・*-]\s*)?(申し込み担当者名|申込担当者名|申込み担当者名|緊急連絡先|連絡先Eメール|連絡先Ｅメール)\s*[:：]/u;
+  return nodes.map(node=>{
+    const source=node.text || (node.rich || []).map(r=>r.text).join('');
+    let hidden=false;
+    const text=source.split('\n').map(line=>{const match=line.match(label);if(!match)return line;hidden=true;return `${match[1]}：（非表示）「詳細を開く」で確認`;}).join('\n');
+    if(hidden)return {id:node.id,type:node.type,text,rich:[],children:[]};
+    return {...node,children:redactOverview(node.children || [])};
+  });
+}
 export function faqCategories(rows) {
   const seen=new Set();return rows.flatMap(r=>{const name=r.tags?.[0]?.trim();if(!name || seen.has(name))return [];seen.add(name);return [{name,en:r.tags_en?.[0] || name}];});
 }

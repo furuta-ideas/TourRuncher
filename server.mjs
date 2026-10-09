@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { plain, tour, orderTours, parseFAQ, overviewBlocks } from './lib.mjs';
+import { plain, tour, orderTours, parseFAQ, overviewBlocks, redactOverview } from './lib.mjs';
 
 const env = process.env;
 const secret = env.SESSION_SECRET || randomBytes(32).toString('hex');
@@ -116,13 +116,13 @@ export const server = http.createServer(async(req,res) => {
       if(id) {
         const p=await notion('pages/'+id);
         if(p.parent?.data_source_id!==sourceId && p.parent?.database_id!=='284cbc412aed8076a429fe54198f6444')return json(res,403,{error:'ツアー一覧の案件を選択してください。'});
-        const version=p.last_edited_time;
+        const version=p.last_edited_time+'-privacy-v1';
         if(version && url.searchParams.get('version')===version)return json(res,200,{notModified:true,version});
         const root=await children(id);const selected=overviewBlocks(root.map(compact));
         let overview;
         if(selected.length){const ids=new Set(selected.map(n=>n.id));overview=await tree(root.filter(n=>ids.has(n.id)));}
         else overview=overviewBlocks(await tree(root));
-        return json(res,200,{tour:tour(p),overview,version});
+        return json(res,200,{tour:tour(p),overview:redactOverview(overview),version});
       }
       return json(res,404,{error:'ページが見つかりません。'});
     }

@@ -1,8 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overviewBlocks, faqCategories, filterFAQCategory, orderedProperties, RecentCache } from '../lib.mjs';
+import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache } from '../lib.mjs';
 import { server } from '../server.mjs';
+
+test('実施概要の個人情報は本文・リンク・子要素から除去し、他の色文字を保持',()=>{
+ const normal={type:'bulleted_list_item',text:'所要時間：120分',rich:[{text:'120分',color:'pink',bold:true}]};
+ const nodes=[{type:'callout',children:['申し込み担当者名：テスト太郎','緊急連絡先：09012345678','連絡先Eメール：private@example.com'].map(text=>({type:'bulleted_list_item',text,rich:[{text,href:'mailto:private@example.com'}],children:[{type:'paragraph',text:'secret-child'}]})).concat(normal)}];
+ const result=redactOverview(nodes);const json=JSON.stringify(result);
+ for(const secret of ['テスト太郎','09012345678','private@example.com','secret-child'])assert.equal(json.includes(secret),false);
+ assert.equal(result[0].children.filter(n=>n.text.includes('（非表示）「詳細を開く」で確認')).length,3);
+ assert.deepEqual(result[0].children[3].rich,normal.rich);
+ assert.equal(nodes[0].children[0].text,'申し込み担当者名：テスト太郎');
+ assert.deepEqual(redactOverview(result),result);
+});
 
 test('キャンセル案件をAPI一覧とキャッシュ表示・中央選択から除外',()=>{
   const make=(id,date,status,category='公式ツアー')=>({id,date,minute:600,title:id,properties:{Status:status,Select:category}});
