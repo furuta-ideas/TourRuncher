@@ -120,17 +120,16 @@ function materialIcon(type){
  else{const img=el('img');img.src=`./logos/${type}.png`;img.alt='';icon.classList.add('supplied-logo');icon.append(img);}
  return icon;
 }
-async function downloadMaterial(item,button){
- const en=contentLanguage==='en',status=$('material-status');button.disabled=true;
- status.textContent=en?'Downloading…':'ダウンロード中…';
- try{
-  const response=await fetch(apiBase+'/api/material/'+encodeURIComponent(item.id),{headers:{Authorization:'Bearer '+accessToken},cache:'no-store'});
-  if(!response.ok){const data=await response.json();throw new Error(data.error || 'Download failed');}
-  const blob=await response.blob();const url=URL.createObjectURL(blob);const a=el('a');a.href=url;a.download=item.name || 'download';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-  status.textContent=en?'Download ready. Open the saved file to use it.':'ダウンロードを開始しました。保存したファイルを開いてご利用ください。';
- }catch(error){status.textContent=(en?'Download failed: ':'ダウンロードできませんでした：')+error.message;}
- finally{button.disabled=false;}
+function downloadMaterial(item,button){
+ const en=contentLanguage==='en';
+ if(!accessToken){$('material-status').textContent=en?'Please log in again.':'再度ログインしてください。';return;}
+ const frame=el('iframe');frame.name='download-'+crypto.randomUUID();frame.hidden=true;frame.title=en?'File download':'ファイルのダウンロード';document.body.append(frame);setTimeout(()=>frame.remove(),600000);
+ const form=el('form');form.method='POST';form.action=apiBase+'/api/material/'+encodeURIComponent(item.id);form.target=frame.name;form.hidden=true;
+ const token=el('input');token.type='hidden';token.name='token';token.value=accessToken;form.append(token);document.body.append(form);form.submit();form.remove();
+ $('material-status').textContent=en?'Download requested. Check your browser downloads.':'ダウンロードを開始します。ブラウザのダウンロード一覧をご確認ください。';
+ button.disabled=true;setTimeout(()=>{button.disabled=false;},1500);
 }
+
 function drawMaterials(){
  const en=contentLanguage==='en',target=$('materials');target.replaceChildren();
  $('content-heading').textContent=en?'Tour content':'ツアーコンテンツ';

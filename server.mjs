@@ -30,8 +30,8 @@ async function downloadMaterial(id,res){
 }
 const sign = text => createHmac('sha256', secret).update(text).digest('base64url');
 const equal = (a,b) => Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b));
-function authenticated(req) {
-  const token = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9_.-]+)$/)?.[1] || '';
+function authenticated(req, suppliedToken) {
+  const token = suppliedToken ?? req.headers.authorization?.match(/^Bearer ([A-Za-z0-9_.-]+)$/)?.[1] ?? '';
   const [expiry, nonce, signature] = token.split('.');
   return !!signature && +expiry > Date.now() && equal(sign(`${expiry}.${nonce}`), signature);
 }
@@ -122,6 +122,14 @@ export const server = http.createServer(async(req,res) => {
       return json(res,200,{ok:true,token:`${value}.${sign(value)}`});
     }
     if(url.pathname.startsWith('/api/')) {
+      const postedMaterial=url.pathname.match(/^\/api\/material\/([0-9a-f-]{32,36})$/i)?.[1];
+      if(postedMaterial && req.method==='POST'){
+        if(!pagesRequest)return json(res,403,{error:'アクセス元を確認できません。'});
+        let text='';for await(const chunk of req){text+=chunk;if(text.length>2048)return json(res,413,{error:'入力が長すぎます。'});}
+        const token=new URLSearchParams(text).get('token') || '';
+        if(!authenticated(req,token))return json(res,401,{error:'パスワードを入力してください。'});
+        return await downloadMaterial(postedMaterial,res);
+      }
       if(!authenticated(req)) return json(res,401,{error:'パスワードを入力してください。'});
       if(req.method!=='GET') return json(res,405,{error:'この操作は使用できません。'});
       if(url.pathname==='/api/roles') return json(res,200,{sections:await sections(/役割分担.*事前準備/)});
