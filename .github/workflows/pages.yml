@@ -27,6 +27,7 @@ jobs:
         run: |
           mkdir _site
           cp public/index.html public/app.js public/style.css public/icon-playbook.png public/opening.png public/favicon.svg lib.mjs _site/
+          cp -R public/logos _site/logos
           node scripts/stamp-release.mjs _site/index.html
       - uses: actions/upload-pages-artifact@v3
         with:

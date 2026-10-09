@@ -117,8 +117,7 @@ let materialNode=null,contentLanguage='ja';
 function materialIcon(type){
  const icon=el('span',null,'material-icon '+type);icon.setAttribute('aria-hidden','true');
  if(type==='youtube')icon.append(el('span','▶'));
- else if(type==='mentimeter'){for(const height of [12,25,18,32]){const bar=el('i');bar.style.height=height+'px';icon.append(bar);}}
- else icon.append(el('span',type==='ppt'?'P':'X'));
+ else{const img=el('img');img.src=`./logos/${type}.png`;img.alt='';icon.classList.add('supplied-logo');icon.append(img);}
  return icon;
 }
 async function downloadMaterial(item,button){

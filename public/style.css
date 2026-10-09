@@ -103,6 +103,8 @@ nav button span{font-size:16px}
 #app .material-icon.youtube>span{font-size:22px!important}
 .material-icon.mentimeter{background:linear-gradient(135deg,#4d69f6,#2440bd);gap:3px}
 .material-icon.mentimeter i{display:block;width:5px;background:#fff;border-radius:3px}
+#app .material-icon.supplied-logo{background:transparent;border-radius:0;box-shadow:none}
+#app .material-icon.supplied-logo img{display:block;width:100%;height:100%;object-fit:contain;border-radius:0}
 #app .material-empty{color:#7e8d9e}
 .trouble-guide+.trouble-guide{border-left:3px solid #d5b8a0}
 @media(max-width:1000px){#panel-prep .tour-side{height:max(780px,calc(100dvh - 178px));grid-template-rows:minmax(0,1fr) minmax(0,2fr)}}
