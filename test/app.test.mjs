@@ -6,6 +6,13 @@ import { server } from '../server.mjs';
 import { runInNewContext } from 'node:vm';
 import { fetchJSON, displayedMaterialRows } from '../lib.mjs';
 
+test('Rev24の英語Pack・distributableと日本語配布版を正しく分類',()=>{
+ const names=['20261022_kashiwanoha_Tours_Pack_E_Rev24.pptx','20261022_kashiwanoha_Tours_Pack_E（distributable）_Rev24.pdf','20261022_柏の葉スマートシティツアー（配布版）_Rev24.pdf'];
+ const result=contentMaterials(names.map(name=>({type:'file',name,url:'https://files.example/'+encodeURIComponent(name)})));
+ assert.deepEqual(result.full.en.map(x=>x.name),[names[0]]);assert.deepEqual(result.handout.en.map(x=>x.name),[names[1]]);assert.deepEqual(result.handout.ja.map(x=>x.name),[names[2]]);
+ assert.equal(result.full.ja.length,0);
+});
+
 test('古いセッションの遅延401で再ログイン後の画面を戻さない',async()=>{
  const source=await readFile(new URL('../public/app.js',import.meta.url),'utf8');const code=source.slice(source.indexOf('async function api('),source.indexOf('function today()'));
  let resolve;const nodes={app:{hidden:false},login:{hidden:true},password:{focus(){}},'login-error':{}};

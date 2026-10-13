@@ -117,8 +117,8 @@ export function contentMaterials(nodes=[]) {
    let filename=n.name || n.caption || '';try{filename ||= decodeURIComponent(new URL(n.url).pathname.split('/').pop());}catch{}
    const name=(filename || n.text || '').normalize('NFKC');
    if(n.url && ['file','video','audio','pdf','bookmark','embed','link_preview'].includes(n.type)) {
-    const row=/配布|handout/i.test(name)?'handout':/スクリプト|script/i.test(name)?'script':/FAQ/i.test(name)?'faq':/座学|lecture|presentation/i.test(name)?'lecture':/街歩き|walking/i.test(name)?'walk':/フルパッケージ|full.package/i.test(name)?'full':n.type==='video' || /\.(mp4|mov|webm)$/i.test(name) || /youtu(?:\.be|be\.com)/i.test(n.url)?'video':null;
-    const actual=/英語|English/i.test(name)?'en':/日本語|Japanese/i.test(name)?'ja':lang;
+    const row=/配布|handout|distributable/i.test(name)?'handout':/スクリプト|script/i.test(name)?'script':/FAQ/i.test(name)?'faq':/座学|lecture|presentation/i.test(name)?'lecture':/街歩き|walking/i.test(name)?'walk':/フルパッケージ|full.package|Tours_Pack_[EJ](?:_|[（(])/i.test(name)?'full':n.type==='video' || /\.(mp4|mov|webm)$/i.test(name) || /youtu(?:\.be|be\.com)/i.test(n.url)?'video':null;
+    const actual=/英語|English|Tours_Pack_E(?:_|[（(])/i.test(name)?'en':/日本語|Japanese|柏の葉スマートシティツアー|Tours_Pack_J(?:_|[（(])/i.test(name)?'ja':lang;
     if(row)result[row][actual].push({...n,name:filename || n.text || row,reference:/参考/.test(context)});
    }
    walk(n.children || [],lang,context+' '+(n.text || ''));

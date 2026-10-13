@@ -121,6 +121,7 @@ let materialNode=null,contentLanguage='ja',mentimeterUrl='https://www.mentimeter
 function materialIcon(type){
  const icon=el('span',null,'material-icon '+type);icon.setAttribute('aria-hidden','true');
  if(type==='youtube')icon.append(el('span','▶'));
+ else if(type==='pdf')icon.append(el('span','PDF'));
  else{const img=el('img');img.src=`./logos/${type}.png`;img.alt='';icon.classList.add('supplied-logo');icon.append(img);}
  return icon;
 }
@@ -167,7 +168,7 @@ function drawMaterials(){
   for(const lang of ['ja','en']){const cell=el('td');
    if(id==='menti' && lang==='ja'){const a=link(mentimeterUrl,en?'Open':'開く','material-control');a.replaceChildren(materialIcon('mentimeter'),el('span',en?'Open':'開く'));a.setAttribute('aria-label',en?'Open Mentimeter':'Mentimeterを開く');cell.append(a);}
    else{const items=matrix[id][lang];if(!items.length)cell.append(el('span','ー','material-empty'));
-    for(const item of items){const button=el('button',null,'material-control');button.type='button';button.title=item.name;button.setAttribute('aria-label',`${item.name} ${en?'Download':'ダウンロード'}`);const type=id==='video'?'youtube':/\.(xlsx?|csv)$/i.test(item.name)?'excel':'ppt';button.append(materialIcon(type),el('span',item.name,'material-filename'));button.addEventListener('click',()=>downloadMaterial(item,button));cell.append(button);}
+    for(const item of items){const button=el('button',null,'material-control');button.type='button';button.title=item.name;button.setAttribute('aria-label',`${item.name} ${en?'Download':'ダウンロード'}`);const type=id==='video'?'youtube':/\.pdf$/i.test(item.name)?'pdf':/\.(xlsx?|csv)$/i.test(item.name)?'excel':'ppt';button.append(materialIcon(type),el('span',item.name,'material-filename'));button.addEventListener('click',()=>downloadMaterial(item,button));cell.append(button);}
    }row.append(cell);
   }body.append(row);
  }table.append(body);const wrap=el('div',null,'materials-wrap');wrap.append(table);target.append(wrap);

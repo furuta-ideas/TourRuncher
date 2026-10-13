@@ -133,3 +133,6 @@ nav button span{font-size:16px}
 
 .opening-title{white-space:nowrap;font-size:clamp(12px,3.7vw,60px);letter-spacing:0;left:2%;right:2%}
 #login-status{min-height:24px;margin:12px 0 0;text-align:center}
+
+.material-icon.pdf{background:linear-gradient(135deg,#ef4c47,#b51d2a)}
+#app .material-icon.pdf>span{font-size:12px!important}
