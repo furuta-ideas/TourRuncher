@@ -5,6 +5,16 @@ import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overvi
 import { server } from '../server.mjs';
 import { runInNewContext } from 'node:vm';
 import { fetchJSON, displayedMaterialRows } from '../lib.mjs';
+import { speakingHighlights } from '../lib.mjs';
+
+test('話す際のキーワードと数字を強調し、本文と数字の単位を保持',()=>{
+ const text='現在の就業人口は約14,000人。AEMSで20％削減。AI is useful, unlike train.';
+ const parts=speakingHighlights(text,['現在','人口','就業人口','AEMS','AI']);
+ assert.equal(parts.map(p=>p.text).join(''),text);
+ assert.deepEqual(parts.filter(p=>p.highlight).map(p=>p.text),['就業人口','14,000人','AEMS','20％','AI']);
+ const unsafe='<script>alert(1)</script>';assert.equal(speakingHighlights(unsafe).map(p=>p.text).join(''),unsafe);
+ assert.equal(speakingHighlights('面積２７３ha。',['C++']).filter(p=>p.highlight)[0].text,'２７３ha');
+});
 
 test('Rev24の英語Pack・distributableと日本語配布版を正しく分類',()=>{
  const names=['20261022_kashiwanoha_Tours_Pack_E_Rev24.pptx','20261022_kashiwanoha_Tours_Pack_E（distributable）_Rev24.pdf','20261022_柏の葉スマートシティツアー（配布版）_Rev24.pdf'];

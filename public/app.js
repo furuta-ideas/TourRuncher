@@ -1,4 +1,4 @@
-import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, displayedMaterialRows, fetchJSON, contentMaterials, troubleSections, receiveDownload } from './lib.mjs';
+import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, displayedMaterialRows, fetchJSON, contentMaterials, troubleSections, receiveDownload, speakingHighlights } from './lib.mjs';
 const $ = id => document.getElementById(id);
 const apiBase='https://tourruncher.onrender.com';
 let accessToken='';
@@ -199,7 +199,7 @@ async function faqSearch() {
 $('faq-form').addEventListener('submit',e=>{e.preventDefault();clearTimeout(faqTimer);state.category=null;renderCategories();faqSearch();});
 $('faq-query').addEventListener('input',()=>{clearTimeout(faqTimer);state.category=null;renderCategories();++state.faqSequence;faqTimer=setTimeout(faqSearch,450);});
 function drawFAQ(){ $('faq-results').replaceChildren();for(const r of state.matches.slice(0,state.limit)){
-  const en=state.lang==='en';const card=el('article',null,'faq-card');card.append(el('p',(en?r.tags_en:r.tags)?.join(' / ') || '', 'tag'),el('h3',en?r.question_en || r.question:r.question));for(const answer of (en?r.answers_en || r.answers:r.answers))card.append(el('p',answer));$('faq-results').append(card);
+  const en=state.lang==='en';const card=el('article',null,'faq-card');card.append(el('p',(en?r.tags_en:r.tags)?.join(' / ') || '', 'tag'),el('h3',en?r.question_en || r.question:r.question));for(const answer of (en?r.answers_en || r.answers:r.answers)){const p=el('p');const terms=state.faq.flatMap(rec=>[...(rec.keywords || []),...(rec.tags || []),...(rec.tags_en || [])]);for(const part of speakingHighlights(answer,terms))p.append(el(part.highlight?'strong':'span',part.text,part.highlight?'speaking-keyword':''));card.append(p);}$('faq-results').append(card);
   }$('faq-more').hidden=state.matches.length<=state.limit;$('faq-status').textContent=state.matches.length?`${state.category?'カテゴリー：'+state.category+'　':''}${state.matches.length}件中 ${Math.min(state.limit,state.matches.length)}件を表示`:$('faq-query').value.trim()?'一致するFAQがありません。別のキーワードで検索してください。':'FAQマスターの最新データから検索します。';
 }
 for(const lang of ['ja','en'])$(`lang-${lang}`).addEventListener('click',()=>{state.lang=lang;$('lang-ja').setAttribute('aria-pressed',String(lang==='ja'));$('lang-en').setAttribute('aria-pressed',String(lang==='en'));renderCategories();drawFAQ();});

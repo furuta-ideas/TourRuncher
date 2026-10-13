@@ -100,6 +100,15 @@ export function faqCategories(rows) {
   return [...names].map(name=>({name,en:translations.get(name) || name}));
 }
 export function filterFAQCategory(rows,name){return rows.filter(r=>(r.tags || []).some(t=>normalize(t)===normalize(name))).sort((a,b)=>(a.id || 0)-(b.id || 0));}
+export function speakingHighlights(text,terms=[]) {
+ const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ const generic=new Set(['現在','概要','理由','背景','目的','特徴','内容','その他','紹介','説明']);
+ const words=[...new Set(terms.map(t=>String(t).trim()).filter(t=>t.length>1 && !generic.has(t)))].sort((a,b)=>b.length-a.length).map(t=>/^[\x20-\x7e]+$/.test(t)?`(?<![A-Za-z])${escape(t)}(?![A-Za-z])`:escape(t));
+ const number='[0-9０-９]+(?:[,，.．][0-9０-９]+)*(?:(?:〜|～|–|－|-)[0-9０-９]+(?:[,，.．][0-9０-９]+)*)?(?:兆|億|万)?(?:％|%|人|名|世帯|年|月|日|歳|分|秒|時間|件|社|駅|棟|階|円|倍|ヘクタール|平方メートル|km²|m²|km|cm|ha|㎡|㎢|m)?';
+ const pattern=new RegExp([...words,number].join('|'),'giu');const result=[];let offset=0;
+ for(const match of text.matchAll(pattern)){if(match.index>offset)result.push({text:text.slice(offset,match.index),highlight:false});result.push({text:match[0],highlight:true});offset=match.index+match[0].length;}
+ if(offset<text.length)result.push({text:text.slice(offset),highlight:false});return result;
+}
 
 export function orderedProperties(properties){const first=['Select','Status','会場','時間枠','人数','主担当','副担当'];return [...first,...Object.keys(properties).filter(k=>!first.includes(k))].filter(k=>!['案件','調整進捗'].includes(k) && properties[k]).map(k=>[k,properties[k]]);}
 export const materialRows=[['lecture','座学','Presentation'],['walk','街歩き','Walking tour'],['full','フルパッケージ','Full package'],['handout','配布用','Handouts'],['menti','Mentimeter','Mentimeter'],['video','動画','Videos'],['script','スクリプト','Script'],['faq','FAQ','FAQ']];
