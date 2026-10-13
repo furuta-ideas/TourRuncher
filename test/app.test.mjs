@@ -7,6 +7,15 @@ import { runInNewContext } from 'node:vm';
 import { fetchJSON, displayedMaterialRows } from '../lib.mjs';
 import { speakingHighlights } from '../lib.mjs';
 import { faqCategoryColor } from '../lib.mjs';
+import { answerLinks } from '../lib.mjs';
+
+test('回答のURLをリンク化し、周囲の句読点と本文を保持する',()=>{
+ for(const text of ['資料（https://example.com/a/）です。','See https://example.com/info.html).','https://example.com/page_(test).']){
+  const parts=answerLinks(text);assert.equal(parts.map(p=>p.text).join(''),text);assert.equal(parts.filter(p=>p.href).length,1);assert.ok(!parts.find(p=>p.href).href.endsWith('.'));
+ }
+ assert.deepEqual(answerLinks('javascript:alert(1)'),[{text:'javascript:alert(1)'}]);
+ assert.equal(answerLinks('See https://example.com/a).')[1].href,'https://example.com/a');
+});
 
 test('カテゴリーの正式名称を指定の6色に分類',()=>{
  const groups={gold:['柏の葉スマートシティ概要','歴史','街の運営','街のデータ','これからの街づくり','経営数字'],green:['住民の声','UDCK'],blue:['KOIL','健康長寿・あ・し・た','環境共生','エネルギー・AEMS','モビリティ','都市OS','防災・レジリエンス','かけだし横丁'],silver:['ポートランド','他のスマートシティとの比較'],brown:['ツアー運営'],orange:['1st Stage','2nd Stage']};

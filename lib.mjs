@@ -118,6 +118,16 @@ export function speakingHighlights(text,terms=[]) {
  for(const match of text.matchAll(pattern)){if(match.index>offset)result.push({text:text.slice(offset,match.index),highlight:false});result.push({text:match[0],highlight:true});offset=match.index+match[0].length;}
  if(offset<text.length)result.push({text:text.slice(offset),highlight:false});return result;
 }
+export function answerLinks(text){
+ const parts=[];let offset=0;
+ for(const match of text.matchAll(/https?:\/\/[^\s<>"'「」『』（）【】、。]+/giu)){
+  let url=match[0].replace(/[.,;!?]+$/,'');
+  while(url.endsWith(')') && (url.match(/\)/g)||[]).length>(url.match(/\(/g)||[]).length)url=url.slice(0,-1);
+  if(match.index>offset)parts.push({text:text.slice(offset,match.index)});
+  parts.push({text:url,href:url});offset=match.index+url.length;
+ }
+ if(offset<text.length)parts.push({text:text.slice(offset)});return parts;
+}
 
 export function orderedProperties(properties){const first=['Select','Status','会場','時間枠','人数','主担当','副担当'];return [...first,...Object.keys(properties).filter(k=>!first.includes(k))].filter(k=>!['案件','調整進捗'].includes(k) && properties[k]).map(k=>[k,properties[k]]);}
 export const materialRows=[['lecture','座学','Presentation'],['walk','街歩き','Walking tour'],['full','フルパッケージ','Full package'],['handout','配布用','Handouts'],['menti','Mentimeter','Mentimeter'],['video','動画','Videos'],['script','スクリプト','Script'],['faq','FAQ','FAQ']];

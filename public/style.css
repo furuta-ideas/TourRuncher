@@ -150,3 +150,6 @@ nav button span{font-size:16px}
 #app .category-chip[data-color][aria-pressed=true]{color:white;background:linear-gradient(135deg,var(--chip-ink),color-mix(in srgb,var(--chip-ink) 75%,var(--chip-border)));box-shadow:0 0 0 2px var(--chip-tint),0 3px 8px #182a3826}
 .faq-tag-list{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
 #app .faq-tag-list .faq-tag{display:inline-flex;align-items:center;min-height:30px;padding:4px 10px;border-radius:30px;line-height:1.4;font-weight:700}
+
+#app .faq-card h3{color:#175bb5}
+#app .faq-card .faq-answer-link{color:#175bb5;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
