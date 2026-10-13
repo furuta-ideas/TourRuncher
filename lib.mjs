@@ -93,7 +93,11 @@ export function redactOverview(nodes=[]) {
   });
 }
 export function faqCategories(rows) {
-  const seen=new Set();return rows.flatMap(r=>{const name=r.tags?.[0]?.trim();if(!name || seen.has(name))return [];seen.add(name);return [{name,en:r.tags_en?.[0] || name}];});
+  const names=new Set(),translations=new Map();
+  const add=tag=>{const name=tag?.trim();if(name)names.add(name);};
+  for(const r of rows)add(r.tags?.[0]);
+  for(const r of rows)(r.tags || []).forEach((tag,i)=>{add(tag);const name=tag?.trim(),en=r.tags_en?.[i]?.trim();if(name && en && !translations.has(name))translations.set(name,en);});
+  return [...names].map(name=>({name,en:translations.get(name) || name}));
 }
 export function filterFAQCategory(rows,name){return rows.filter(r=>(r.tags || []).some(t=>normalize(t)===normalize(name))).sort((a,b)=>(a.id || 0)-(b.id || 0));}
 

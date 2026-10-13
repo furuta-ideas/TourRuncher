@@ -140,5 +140,12 @@ test('FAQカテゴリーはマスター順で重複除外し、キーワード�
  assert.deepEqual(filterFAQCategory(rows,'歴史').map(r=>r.id),[2,3]);
 });
 
+test('複数カテゴリーは主分類の後に追加し、英訳と副分類の検索も対応',()=>{
+ const rows=[{id:1,tags:['概要','1st Stage','経営数字'],tags_en:['Overview','Stage One','Business figures']},{id:2,tags:['歴史','2nd Stage','かけだし横丁'],tags_en:['History','Stage Two','Kakedashi Yokocho']},{id:3,tags:['概要','1st Stage']}];
+ assert.deepEqual(faqCategories(rows),[{name:'概要',en:'Overview'},{name:'歴史',en:'History'},{name:'1st Stage',en:'Stage One'},{name:'経営数字',en:'Business figures'},{name:'2nd Stage',en:'Stage Two'},{name:'かけだし横丁',en:'Kakedashi Yokocho'}]);
+ assert.deepEqual(filterFAQCategory(rows,'1st Stage').map(r=>r.id),[1,3]);
+ assert.deepEqual(filterFAQCategory(rows,'かけだし横丁').map(r=>r.id),[2]);
+});
+
 test('プロパティの指定順と調整進捗の非表示',()=>{assert.deepEqual(orderedProperties({副担当:'副',調整進捗:'内部',人数:'15',Status:'準備',Select:'公式',主担当:'主',時間枠:'10:00',会場:'KOIL',お出迎え:'入口'}).map(([k])=>k),['Select','Status','会場','時間枠','人数','主担当','副担当','お出迎え']);});
 test('直近10案件のキャッシュは再表示で優先度を上げ、11件目で最も古い案件を削除',()=>{const c=new RecentCache(10);for(let i=0;i<10;i++)c.set(String(i),{overview:[i],tour:{id:String(i)}});c.get('0');c.set('10',{overview:[10]});assert.equal(c.entries.size,10);assert.equal(c.get('1'),undefined);assert.deepEqual(c.get('0').overview,[0]);const restored=new RecentCache(10,c.serialize());assert.equal(restored.entries.size,10);assert.deepEqual(restored.get('10').overview,[10]);});
