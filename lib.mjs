@@ -100,6 +100,15 @@ export function faqCategories(rows) {
   return [...names].map(name=>({name,en:translations.get(name) || name}));
 }
 export function filterFAQCategory(rows,name){return rows.filter(r=>(r.tags || []).some(t=>normalize(t)===normalize(name))).sort((a,b)=>(a.id || 0)-(b.id || 0));}
+export function faqCategoryColor(name='') {
+ const value=name.normalize('NFKC').trim();
+ if(/^(住民の声|UDCK)$/.test(value))return 'green';
+ if(/^(KOIL|健康長寿|環境共生|エネルギー|モビリティ|都市OS|防災|かけだし横丁)/.test(value))return 'blue';
+ if(/^(ポートランド|他のスマートシティ)/.test(value))return 'silver';
+ if(value==='ツアー運営')return 'brown';
+ if(/^(1st Stage|2nd Stage)$/.test(value))return 'orange';
+ return 'gold';
+}
 export function speakingHighlights(text,terms=[]) {
  const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
  const generic=new Set(['現在','概要','理由','背景','目的','特徴','内容','その他','紹介','説明']);

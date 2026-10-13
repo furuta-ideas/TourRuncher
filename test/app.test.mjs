@@ -6,6 +6,12 @@ import { server } from '../server.mjs';
 import { runInNewContext } from 'node:vm';
 import { fetchJSON, displayedMaterialRows } from '../lib.mjs';
 import { speakingHighlights } from '../lib.mjs';
+import { faqCategoryColor } from '../lib.mjs';
+
+test('カテゴリーの正式名称を指定の6色に分類',()=>{
+ const groups={gold:['柏の葉スマートシティ概要','歴史','街の運営','街のデータ','これからの街づくり','経営数字'],green:['住民の声','UDCK'],blue:['KOIL','健康長寿・あ・し・た','環境共生','エネルギー・AEMS','モビリティ','都市OS','防災・レジリエンス','かけだし横丁'],silver:['ポートランド','他のスマートシティとの比較'],brown:['ツアー運営'],orange:['1st Stage','2nd Stage']};
+ for(const [color,names]of Object.entries(groups))for(const name of names)assert.equal(faqCategoryColor(name),color,name);
+});
 
 test('話す際のキーワードと数字を強調し、本文と数字の単位を保持',()=>{
  const text='現在の就業人口は約14,000人。AEMSで20％削減。AI is useful, unlike train.';

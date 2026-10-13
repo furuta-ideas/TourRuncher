@@ -1,4 +1,4 @@
-import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, displayedMaterialRows, fetchJSON, contentMaterials, troubleSections, receiveDownload, speakingHighlights } from './lib.mjs';
+import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, faqCategoryColor, filterFAQCategory, orderedProperties, RecentCache, displayedMaterialRows, fetchJSON, contentMaterials, troubleSections, receiveDownload, speakingHighlights } from './lib.mjs';
 const $ = id => document.getElementById(id);
 const apiBase='https://tourruncher.onrender.com';
 let accessToken='';
@@ -199,13 +199,13 @@ async function faqSearch() {
 $('faq-form').addEventListener('submit',e=>{e.preventDefault();clearTimeout(faqTimer);state.category=null;renderCategories();faqSearch();});
 $('faq-query').addEventListener('input',()=>{clearTimeout(faqTimer);state.category=null;renderCategories();++state.faqSequence;faqTimer=setTimeout(faqSearch,450);});
 function drawFAQ(){ $('faq-results').replaceChildren();for(const r of state.matches.slice(0,state.limit)){
-  const en=state.lang==='en';const card=el('article',null,'faq-card');card.append(el('p',(en?r.tags_en:r.tags)?.join(' / ') || '', 'tag'),el('h3',en?r.question_en || r.question:r.question));for(const answer of (en?r.answers_en || r.answers:r.answers)){const p=el('p');const terms=state.faq.flatMap(rec=>[...(rec.keywords || []),...(rec.tags || []),...(rec.tags_en || [])]);for(const part of speakingHighlights(answer,terms))p.append(el(part.highlight?'strong':'span',part.text,part.highlight?'speaking-keyword':''));card.append(p);}$('faq-results').append(card);
+  const en=state.lang==='en';const card=el('article',null,'faq-card');const tags=el('div',null,'faq-tag-list');for(const [i,name] of (r.tags || []).entries()){const chip=el('span',en?r.tags_en?.[i] || name:name,'category-chip faq-tag');chip.dataset.color=faqCategoryColor(name);tags.append(chip);}card.append(tags,el('h3',en?r.question_en || r.question:r.question));for(const answer of (en?r.answers_en || r.answers:r.answers)){const p=el('p');const terms=state.faq.flatMap(rec=>[...(rec.keywords || []),...(rec.tags || []),...(rec.tags_en || [])]);for(const part of speakingHighlights(answer,terms))p.append(el(part.highlight?'strong':'span',part.text,part.highlight?'speaking-keyword':''));card.append(p);}$('faq-results').append(card);
   }$('faq-more').hidden=state.matches.length<=state.limit;$('faq-status').textContent=state.matches.length?`${state.category?'カテゴリー：'+state.category+'　':''}${state.matches.length}件中 ${Math.min(state.limit,state.matches.length)}件を表示`:$('faq-query').value.trim()?'一致するFAQがありません。別のキーワードで検索してください。':'FAQマスターの最新データから検索します。';
 }
 for(const lang of ['ja','en'])$(`lang-${lang}`).addEventListener('click',()=>{state.lang=lang;$('lang-ja').setAttribute('aria-pressed',String(lang==='ja'));$('lang-en').setAttribute('aria-pressed',String(lang==='en'));renderCategories();drawFAQ();});
 $('faq-more').addEventListener('click',()=>{state.limit+=4;drawFAQ();});
 
-function renderCategories(){const target=$('faq-categories');target.replaceChildren();for(const c of faqCategories(state.faq)){const b=el('button',state.lang==='en'?c.en:c.name,'category-chip');b.type='button';b.setAttribute('aria-pressed',String(state.category===c.name));b.addEventListener('click',()=>{clearTimeout(faqTimer);state.category=c.name;$('faq-query').value='';renderCategories();faqSearch();});target.append(b);}}
+function renderCategories(){const target=$('faq-categories');target.replaceChildren();for(const c of faqCategories(state.faq)){const b=el('button',state.lang==='en'?c.en:c.name,'category-chip');b.type='button';b.dataset.color=faqCategoryColor(c.name);b.setAttribute('aria-pressed',String(state.category===c.name));b.addEventListener('click',()=>{clearTimeout(faqTimer);state.category=c.name;$('faq-query').value='';renderCategories();faqSearch();});target.append(b);}}
 async function loadCategories(){try{const data=await api('/api/faq');state.faq=data.rows;renderCategories();}catch(error){errorAt($('faq-categories'),error);}}
 
 function renderTroubles(node){

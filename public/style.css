@@ -138,3 +138,15 @@ nav button span{font-size:16px}
 #app .material-icon.pdf>span{font-size:12px!important}
 
 .faq-card .speaking-keyword{color:#b52c74;font-weight:900}
+
+/* Shared category palette for search buttons and result tags. */
+.category-chip[data-color=gold]{--chip-ink:#775309;--chip-border:#b48b24;--chip-tint:#fff0bd}
+.category-chip[data-color=green]{--chip-ink:#12663d;--chip-border:#36a570;--chip-tint:#d9f5e5}
+.category-chip[data-color=blue]{--chip-ink:#2158a0;--chip-border:#5b91d5;--chip-tint:#deedff}
+.category-chip[data-color=silver]{--chip-ink:#495564;--chip-border:#98a5b4;--chip-tint:#e9edf2}
+.category-chip[data-color=brown]{--chip-ink:#70412b;--chip-border:#ad795b;--chip-tint:#f5e4d8}
+.category-chip[data-color=orange]{--chip-ink:#97410b;--chip-border:#df893d;--chip-tint:#ffe4c7}
+#app .category-chip[data-color]{color:var(--chip-ink);border-color:var(--chip-border);background:linear-gradient(140deg,#fff,var(--chip-tint));box-shadow:0 2px 6px color-mix(in srgb,var(--chip-border) 18%,transparent)}
+#app .category-chip[data-color][aria-pressed=true]{color:white;background:linear-gradient(135deg,var(--chip-ink),color-mix(in srgb,var(--chip-ink) 75%,var(--chip-border)));box-shadow:0 0 0 2px var(--chip-tint),0 3px 8px #182a3826}
+.faq-tag-list{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+#app .faq-tag-list .faq-tag{display:inline-flex;align-items:center;min-height:30px;padding:4px 10px;border-radius:30px;line-height:1.4;font-weight:700}
