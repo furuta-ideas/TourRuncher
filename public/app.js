@@ -1,4 +1,4 @@
-import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, materialRows, contentMaterials, troubleSections, receiveDownload } from './lib.mjs';
+import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, displayedMaterialRows, fetchJSON, contentMaterials, troubleSections, receiveDownload } from './lib.mjs';
 const $ = id => document.getElementById(id);
 const apiBase='https://tourruncher.onrender.com';
 let accessToken='';
@@ -40,10 +40,11 @@ function renderBlocks(nodes,target) {
 }
 function errorAt(target,error) { target.replaceChildren(el('p',error.message || String(error),'error')); }
 async function api(path,options) {
- const key=(!options || !options.method || options.method==='GET')?path:null;
+ const requestToken=accessToken;const key=(!options || !options.method || options.method==='GET')?requestToken+':'+path:null;
  if(key && pending.has(key))return pending.get(key);
- const job=(async()=>{const headers={...options?.headers,...(accessToken?{Authorization:'Bearer '+accessToken}:{})};const r=await fetch(apiBase+path,{cache:'no-store',...options,headers});const data=await r.json();
- if(!r.ok){if(r.status===401 && path!='/api/login'){$('app').hidden=true;$('login').hidden=false;$('password').focus();}throw new Error(data.error || '情報を取得できませんでした。');}return data;})();
+ const job=(async()=>{const headers={...options?.headers,...(requestToken?{Authorization:'Bearer '+requestToken}:{})};
+ const {response:r,data}=await fetchJSON(apiBase+path,{cache:'no-store',...options,headers},path==='/api/login'?{timeoutMs:60000,retries:1,onRetry:()=>{$('login-status').textContent='サーバーに再接続しています…';}}:{});
+ if(!r.ok){if(r.status===401 && path!='/api/login' && requestToken===accessToken && requestToken){accessToken='';$('app').hidden=true;$('login').hidden=false;$('login-error').textContent='ログインの有効期限が切れました。再度ログインしてください。';$('password').focus();}throw new Error(data.error || '情報を取得できませんでした。');}return data;})();
  if(key)pending.set(key,job);try{return await job;}finally{if(key)pending.delete(key);}
 }
 function today() {return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
@@ -65,8 +66,11 @@ async function opening() {
 }
 opening();
 $('login-form').addEventListener('submit',async e=>{
-  e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;$('login-error').textContent='';
-  try{const login=await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});accessToken=login.token || '';$('password').value='';$('login').hidden=true;$('app').hidden=false;tab('prep');load();}catch(error){$('login-error').textContent=error.message;}finally{b.disabled=false;}
+ e.preventDefault();const b=e.target.querySelector('button');if(b.disabled)return;b.disabled=true;b.textContent='ログイン中…';$('login-error').textContent='';$('login-status').textContent='接続しています…';
+ const waiting=setTimeout(()=>{$('login-status').textContent='サーバーを起動しています。しばらくお待ちください…';},5000);
+ try{const login=await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value.normalize('NFKC').trim()})});if(typeof login.token!=='string' || !login.token)throw new Error('ログインを確認できませんでした。再度お試しください。');accessToken=login.token;$('password').value='';$('login').hidden=true;$('app').hidden=false;tab('prep');load();}
+ catch(error){$('login-error').textContent=error.message;}
+ finally{clearTimeout(waiting);b.disabled=false;b.textContent='ログイン';$('login-status').textContent='';}
 });
 function positionTour(index) {
   const item=$('tour-list').children[index];if(item)$('tour-list').scrollTop=item.offsetTop-($('tour-list').clientHeight-item.offsetHeight)/2;
@@ -113,7 +117,7 @@ function copyRow(text,value=text) {
   row.append(el('p',text),button);return row;
 }
 function displaySection(target,node) {target.replaceChildren();if(node)renderBlocks(node.children,target);else target.append(el('p','Playbookに該当する情報が見つかりません。','hint'));}
-let materialNode=null,contentLanguage='ja';
+let materialNode=null,contentLanguage='ja',mentimeterUrl='https://www.mentimeter.com/';
 function materialIcon(type){
  const icon=el('span',null,'material-icon '+type);icon.setAttribute('aria-hidden','true');
  if(type==='youtube')icon.append(el('span','▶'));
@@ -155,18 +159,13 @@ async function downloadMaterial(item,button){
 function drawMaterials(){
  const en=contentLanguage==='en',target=$('materials');target.replaceChildren();
  $('content-heading').textContent=en?'Tour content':'ツアーコンテンツ';
- $('menti-launch-label').textContent=en?'Open Mentimeter':'Mentimeterを開く';
- const mentiIcon=$('menti-launch').querySelector('.menti-icon');if(mentiIcon)mentiIcon.replaceChildren(materialIcon('mentimeter'));
- for(const b of $('menti-info').querySelectorAll('.copy-row button'))b.textContent=en?'Copy':'コピー';
- for(const p of $('menti-info').querySelectorAll('.copy-row p'))p.textContent=p.textContent.replace(en?/^パスワード：/:/^Password: /,en?'Password: ':'パスワード：');
- const usage=$('menti-info').querySelector('summary');if(usage)usage.textContent=en?'Instructions':'使い方';
  for(const lang of ['ja','en'])$('content-lang-'+lang).setAttribute('aria-pressed',String(contentLanguage===lang));
  if(!materialNode){target.append(el('p',en?'Loading content…':'コンテンツを取得しています…','loading'));return;}
  const matrix=contentMaterials(materialNode.children),table=el('table',null,'materials-table');table.setAttribute('aria-label',en?'Tour downloads':'ツアーコンテンツ一覧');
  const head=el('thead'),hr=el('tr');for(const title of [en?'Content':'内容',en?'Japanese tour':'日本語ツアー',en?'English tour':'英語ツアー']){const th=el('th',title);th.scope='col';hr.append(th);}head.append(hr);table.append(head);const body=el('tbody');
- for(const [id,ja,english] of materialRows){const row=el('tr'),heading=el('th',en?english:ja);heading.scope='row';row.append(heading);
+ for(const [id,ja,english] of displayedMaterialRows){const row=el('tr'),heading=el('th',en?english:ja);heading.scope='row';row.append(heading);
   for(const lang of ['ja','en']){const cell=el('td');
-   if(id==='menti' && lang==='ja'){const a=link($('menti-launch').href,en?'Open':'開く','material-control');a.replaceChildren(materialIcon('mentimeter'),el('span',en?'Open':'開く'));a.setAttribute('aria-label',en?'Open Mentimeter':'Mentimeterを開く');cell.append(a);}
+   if(id==='menti' && lang==='ja'){const a=link(mentimeterUrl,en?'Open':'開く','material-control');a.replaceChildren(materialIcon('mentimeter'),el('span',en?'Open':'開く'));a.setAttribute('aria-label',en?'Open Mentimeter':'Mentimeterを開く');cell.append(a);}
    else{const items=matrix[id][lang];if(!items.length)cell.append(el('span','ー','material-empty'));
     for(const item of items){const button=el('button',null,'material-control');button.type='button';button.title=item.name;button.setAttribute('aria-label',`${item.name} ${en?'Download':'ダウンロード'}`);const type=id==='video'?'youtube':/\.(xlsx?|csv)$/i.test(item.name)?'excel':'ppt';button.append(materialIcon(type),el('span',item.name,'material-filename'));button.addEventListener('click',()=>downloadMaterial(item,button));cell.append(button);}
    }row.append(cell);
@@ -180,16 +179,12 @@ async function loadPlaybook(){
   try{
     const nodes=(await api('/api/playbook')).sections;
     materialNode=section(nodes,/コンテンツ/);renderTroubles(section(nodes,/トラブル/));displaySection($('contacts'),section(nodes,/緊急連絡先/));
-    const menti=section(nodes,/Mentimeter/i);$('menti-info').replaceChildren();
-    if(menti){const texts=flatten(menti.children).map(n=>n.text).filter(Boolean);const all=texts.join('\n');const mail=all.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];const pwd=all.match(/(?:Pwd|Password|パスワード|PWD)\s*[：:]\s*([^\s]+)/i)?.[1];if(mail)$('menti-info').append(copyRow(`ID：${mail}`,mail));if(pwd)$('menti-info').append(copyRow(`パスワード：${pwd}`,pwd));
-      if(!mail || !pwd)$('menti-info').append(el('p','ログイン情報を確認してください。','hint'));const d=el('details');d.append(el('summary','使い方'));renderBlocks(menti.children,d);$('menti-info').append(d);
-      const u=flatten(menti.children).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://www.mentimeter.com'));if(u)$('menti-launch').href=u.href;
-    }else $('menti-info').append(el('p','PlaybookにMentimeterの情報が見つかりません。','hint'));
+    const menti=section(nodes,/Mentimeter/i);const mentiLink=flatten(menti?.children || []).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://www.mentimeter.com'));mentimeterUrl=mentiLink?.href || 'https://www.mentimeter.com/';
     drawMaterials();
     const faq=section(nodes,/ＦＡＱアプリ|FAQアプリ/);
     if(faq){const url=flatten(faq.children).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://'));if(url)$('faq-master').href=url.href;}
     $('faq-master').href||= 'https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/';
-  }catch(error){for(const id of ['materials','troubles','contacts','menti-info'])errorAt($(id),error);}
+  }catch(error){for(const id of ['materials','troubles','contacts','trouble-guides'])errorAt($(id),error);}
 }
 function load(){ $('today').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(new Date());loadTours();loadPlaybook();loadCategories(); }
 $('roles-button').addEventListener('click',async()=>{const target=$('roles');if(rolesCache)displaySection(target,rolesCache);else target.replaceChildren(el('p','読み込み中…','loading'));$('roles-dialog').showModal();try{const data=await api('/api/roles');const latest=section(data.sections,/役割分担/);if(JSON.stringify(latest)!==JSON.stringify(rolesCache)){rolesCache=latest;save('tour-roles-v1',latest);displaySection(target,latest);}}catch(error){if(rolesCache)target.append(el('p','最新情報を確認できませんでした。キャッシュを表示中です。','hint'));else errorAt(target,error);}});$('roles-close').addEventListener('click',()=>$('roles-dialog').close());
@@ -213,7 +208,7 @@ function renderCategories(){const target=$('faq-categories');target.replaceChild
 async function loadCategories(){try{const data=await api('/api/faq');state.faq=data.rows;renderCategories();}catch(error){errorAt($('faq-categories'),error);}}
 
 function renderTroubles(node){
- const target=$('troubles');target.replaceChildren();if(!node){displaySection(target,null);return;}
+ const target=$('troubles');target.replaceChildren();$('trouble-guides').replaceChildren();if(!node){displaySection(target,null);return;}
  const {main,guides}=troubleSections(node.children || []);renderBlocks(main,target);
- if(guides.length){const grid=el('div',null,'trouble-guides');for(const group of guides){const card=el('article',null,'trouble-guide');renderBlocks(group,card);grid.append(card);}const gap=(3-grid.children.length%3)%3;for(let i=0;i<gap;i++){const reserve=el('div',null,'trouble-reserve');reserve.setAttribute('aria-hidden','true');grid.append(reserve);}target.append(grid);}
+ if(guides.length){const grid=el('div',null,'trouble-guides');for(const group of guides){const card=el('article',null,'trouble-guide');renderBlocks(group,card);grid.append(card);}const gap=(3-grid.children.length%3)%3;for(let i=0;i<gap;i++){const reserve=el('div',null,'trouble-reserve');reserve.setAttribute('aria-hidden','true');grid.append(reserve);}$('trouble-guides').append(grid);}
 }

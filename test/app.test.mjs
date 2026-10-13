@@ -3,6 +3,32 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { orderTours, initialTour, visibleTour, tour, parseFAQ, searchFAQ, overviewBlocks, redactOverview, faqCategories, filterFAQCategory, orderedProperties, RecentCache, contentMaterials, materialRows, troubleSections, receiveDownload } from '../lib.mjs';
 import { server } from '../server.mjs';
+import { runInNewContext } from 'node:vm';
+import { fetchJSON, displayedMaterialRows } from '../lib.mjs';
+
+test('古いセッションの遅延401で再ログイン後の画面を戻さない',async()=>{
+ const source=await readFile(new URL('../public/app.js',import.meta.url),'utf8');const code=source.slice(source.indexOf('async function api('),source.indexOf('function today()'));
+ let resolve;const nodes={app:{hidden:false},login:{hidden:true},password:{focus(){}},'login-error':{}};
+ const ctx={apiBase:'https://test.invalid',pending:new Map(),accessToken:'old-session',$:id=>nodes[id],fetchJSON:()=>new Promise(r=>resolve=r)};
+ runInNewContext(code+';this.call=api;',ctx);const old=ctx.call('/api/tours').catch(()=>{});ctx.accessToken='new-session';resolve({response:{ok:false,status:401},data:{error:'expired'}});await old;assert.equal(nodes.app.hidden,false);assert.equal(nodes.login.hidden,true);
+ const current=ctx.call('/api/tours').catch(()=>{});resolve({response:{ok:false,status:401},data:{error:'expired'}});await current;assert.equal(nodes.login.hidden,false);assert.equal(ctx.accessToken,'');
+});
+test('ログイン成功時に画面遷移し、連打を抑止して全角入力を正規化',async()=>{
+ const source=await readFile(new URL('../public/app.js',import.meta.url),'utf8');const code=source.slice(source.indexOf("$('login-form').addEventListener('submit'"),source.indexOf('function positionTour'));
+ let submit,resolve,calls=0,loaded=0;const button={disabled:false};const form={addEventListener(_,f){submit=f;},querySelector(){return button;}};const nodes={'login-form':form,password:{value:'２０２６ '},login:{hidden:false},app:{hidden:true},'login-error':{},'login-status':{}};
+ const ctx={$:id=>nodes[id],accessToken:'',setTimeout,clearTimeout,tab(){},load(){loaded++;},api:(_,options)=>{calls++;assert.equal(JSON.parse(options.body).password,'2026');return new Promise(r=>resolve=r);}};
+ runInNewContext(code,ctx);const first=submit({preventDefault(){},target:form});await submit({preventDefault(){},target:form});assert.equal(calls,1);resolve({token:'valid-session'});await first;assert.equal(nodes.login.hidden,true);assert.equal(nodes.app.hidden,false);assert.equal(loaded,1);assert.equal(button.disabled,false);
+});
+test('起動中503は自動再接続し、無応答はタイムアウト後に再試行できる',async()=>{
+ const original=globalThis.fetch;let calls=0,retries=0;
+ try{globalThis.fetch=async()=>++calls===1?new Response('<html>Starting</html>',{status:503}):Response.json({token:'ok'});const result=await fetchJSON('https://test.invalid',{}, {retries:1,onRetry(){retries++;}});assert.equal(result.data.token,'ok');assert.equal(retries,1);
+ calls=0;globalThis.fetch=(_,options)=>{calls++;return new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError'))));};await assert.rejects(fetchJSON('https://test.invalid',{}, {timeoutMs:10,retries:1}),/再度ログイン/);assert.equal(calls,2);
+ }finally{globalThis.fetch=original;}
+});
+test('表示行を削減し、トラブル表・緊急連絡先・案内図の順で配置',async()=>{
+ assert.deepEqual(displayedMaterialRows.map(([id])=>id),['full','handout','menti','script','faq']);const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8');
+ assert.ok(html.indexOf('id="troubles"')<html.indexOf('id="contacts"'));assert.ok(html.indexOf('id="contacts"')<html.indexOf('id="trouble-guides"'));assert.equal(html.includes('id="menti-launch"'),false);assert.match(html,/class="opening-title">柏の葉スマートシティツアー　PlayBook<\/p>/);
+});
 
 test('ダウンロード進捗は実受信量を示し、途中終了は完了扱いにしない',async()=>{
  const bytes=new TextEncoder();const updates=[];

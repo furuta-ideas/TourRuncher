@@ -130,3 +130,6 @@ nav button span{font-size:16px}
 #download-state{min-height:48px;font-size:12pt;line-height:1.5}
 .download-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
 @media(max-width:650px){#app .materials-table td{padding:5px 4px}#app .materials-table .material-control{gap:5px;padding:2px}#app .material-icon{flex-basis:32px;width:32px;height:32px}}
+
+.opening-title{white-space:nowrap;font-size:clamp(12px,3.7vw,60px);letter-spacing:0;left:2%;right:2%}
+#login-status{min-height:24px;margin:12px 0 0;text-align:center}

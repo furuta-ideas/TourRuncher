@@ -1,4 +1,22 @@
 export const plain = (items = []) => items.map(x => x.plain_text ?? x.text?.content ?? '').join('');
+export async function fetchJSON(url,options={},settings={}) {
+ const {timeoutMs=120000,retries=0,onRetry=()=>{}}=settings;
+ for(let attempt=0;;attempt++){
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  try{
+   const response=await fetch(url,{...options,signal:controller.signal});
+   const data=await response.json().catch(()=>null);
+   if([502,503,504].includes(response.status) && attempt<retries){onRetry();continue;}
+   if(!data)throw new Error('サーバーに接続できません。少し待って再度お試しください。');
+   return {response,data};
+  }catch(error){
+   if((controller.signal.aborted || error instanceof TypeError) && attempt<retries){onRetry();continue;}
+   if(controller.signal.aborted)throw new Error('接続に時間がかかっています。再度ログインしてください。');
+   if(error instanceof TypeError)throw new Error('通信できません。ネットワーク接続を確認して再度お試しください。');
+   throw error;
+  }finally{clearTimeout(timer);}
+ }
+}
 export function property(p) {
   const v = p[p.type];
   if (['title', 'rich_text'].includes(p.type)) return plain(v);
@@ -81,6 +99,7 @@ export function filterFAQCategory(rows,name){return rows.filter(r=>(r.tags || []
 
 export function orderedProperties(properties){const first=['Select','Status','会場','時間枠','人数','主担当','副担当'];return [...first,...Object.keys(properties).filter(k=>!first.includes(k))].filter(k=>!['案件','調整進捗'].includes(k) && properties[k]).map(k=>[k,properties[k]]);}
 export const materialRows=[['lecture','座学','Presentation'],['walk','街歩き','Walking tour'],['full','フルパッケージ','Full package'],['handout','配布用','Handouts'],['menti','Mentimeter','Mentimeter'],['video','動画','Videos'],['script','スクリプト','Script'],['faq','FAQ','FAQ']];
+export const displayedMaterialRows=materialRows.filter(([id])=>!['lecture','walk','video'].includes(id));
 export async function receiveDownload(response,onProgress){
  if(!response.body)throw new Error('ファイルを受信できません。');
  const total=Number(response.headers.get('content-length')) || 0;
