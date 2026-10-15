@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { plain, tour, orderTours, parseFAQ, overviewBlocks, redactOverview } from './lib.mjs';
 
 const env = process.env;
-const secret = env.SESSION_SECRET || randomBytes(32).toString('hex');
+let secret = env.SESSION_SECRET;
 const master = env.FAQ_MASTER_URL || 'https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/';
 const pageId = env.PLAYBOOK_ID || '2d2cbc412aed8006b7bbf5b2a26b018a';
 const sourceId = env.TOUR_SOURCE_ID || '284cbc41-2aed-8052-84c5-000b8c68d91c';
@@ -15,13 +15,15 @@ function registerMaterials(nodes){
  function scan(items,inContent=false){for(const n of items){const allowed=inContent || (n.type==='toggle' && /コンテンツ/.test(n.text || ''));if(allowed && ['file','video','audio','pdf'].includes(n.type) && n.url)materialFiles.set(n.id,n);scan(n.children || [],allowed);}}
  scan(nodes);
 }
-async function downloadMaterial(id,res){
- if(!materialFiles.has(id))registerMaterials(await sections());
+async function downloadMaterial(id,res,metadata=false){
+ if(!materialFiles.has(id))registerMaterials(await sections(/コンテンツ/));
  const item=materialFiles.get(id);
  if(!item)return json(res,404,{error:'コンテンツが見つかりません。アプリを開き直してください。'});
  const latest=Date.parse(item.expiresAt)>Date.now()+60000?item:compact(await notion('blocks/'+id));
  const url=new URL(latest.url || item.url);
  if(url.protocol!=='https:' || !/(^|\.)amazonaws\.com$|(^|\.)notion-static\.com$/.test(url.hostname))return json(res,400,{error:'このファイルはダウンロードに対応していません。'});
+ if(metadata)return json(res,200,{url:url.href,name:latest.name || item.name || decodeURIComponent(url.pathname.split('/').pop()),direct:true});
+ if(env.DIRECT_DOWNLOADS==='1')return json(res,400,{error:'配布元から直接ダウンロードしてください。'});
  const response=await fetch(url,{signal:AbortSignal.timeout(3600000),redirect:'error'});
  if(!response.ok || !response.body)return json(res,502,{error:'ファイルを取得できません。しばらくしてから再度お試しください。'});
  const filename=latest.name || item.name || decodeURIComponent(url.pathname.split('/').pop()) || 'download';
@@ -39,7 +41,7 @@ function authenticated(req, suppliedToken) {
 const delay = ms => new Promise(r => setTimeout(r, ms));
 let queue = Promise.resolve();
 function notion(path, body) {
-  const job = queue.then(async () => {
+  const job = (env.CLOUDFLARE_WORKER==='1'?Promise.resolve():queue).then(async () => {
     if (!env.NOTION_TOKEN) throw new Error('Notion連携が未設定です。管理者がNOTION_TOKENを設定し、Playbookとツアー一覧を接続してください。');
     for (let retry = 0; retry < 4; retry++) {
       const response = await fetch(`https://api.notion.com/v1/${path}`, {
@@ -107,6 +109,7 @@ export const server = http.createServer(async(req,res) => {
   if(pagesRequest && url.pathname.startsWith('/api/')){res.setHeader('Access-Control-Allow-Origin',pagesOrigin);res.setHeader('Vary','Origin');res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization');}
   if(req.method==='OPTIONS' && url.pathname.startsWith('/api/')){res.writeHead(pagesRequest?204:403);return res.end();}
   try {
+    secret ||= env.SESSION_SECRET || randomBytes(32).toString('hex');
     if(url.pathname==='/health') return json(res,200,{ok:true});
     if(req.headers.origin && !pagesRequest && url.pathname.startsWith('/api/'))return json(res,403,{error:'アクセス元を確認できません。'});
     if(url.pathname==='/api/login' && req.method==='POST') {
@@ -134,9 +137,15 @@ export const server = http.createServer(async(req,res) => {
       if(!authenticated(req)) return json(res,401,{error:'パスワードを入力してください。'});
       if(req.method!=='GET') return json(res,405,{error:'この操作は使用できません。'});
       if(url.pathname==='/api/roles') return json(res,200,{sections:await sections(/役割分担.*事前準備/)});
-      if(url.pathname==='/api/playbook'){const nodes=await sections();registerMaterials(nodes);return json(res,200,{sections:nodes});}
+      if(url.pathname==='/api/playbook'){
+        const patterns={content:/コンテンツ/,ids:/IDとパスワード/,trouble:/トラブル/,contacts:/緊急連絡先/,faq:/ＦＡＱアプリ|FAQアプリ/};
+        const key=url.searchParams.get('section');
+        if(key && !patterns[key])return json(res,400,{error:'指定した項目を確認してください。'});
+        if(env.CLOUDFLARE_WORKER==='1' && !key)return json(res,400,{error:'取得する項目を指定してください。'});
+        const nodes=await sections(key?patterns[key]:wanted);registerMaterials(nodes);return json(res,200,{sections:nodes});
+      }
       const materialId=url.pathname.match(/^\/api\/material\/([0-9a-f-]{32,36})$/i)?.[1];
-      if(materialId)return await downloadMaterial(materialId,res);
+      if(materialId)return await downloadMaterial(materialId,res,url.searchParams.get('metadata')==='1');
       if(url.pathname==='/api/tours') return json(res,200,{tours:await tours()});
       if(url.pathname==='/api/faq') {
         const response=await fetch(master,{cache:'no-store',signal:AbortSignal.timeout(20000),headers:{'Cache-Control':'no-cache'}});

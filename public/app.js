@@ -140,8 +140,12 @@ async function downloadMaterial(item,button){
  $('download-cancel').hidden=false;$('download-close').hidden=true;$('download-save').hidden=true;
  $('download-cancel').textContent=en?'Cancel':'中止';$('download-close').textContent=en?'Close':'閉じる';$('download-save').textContent=en?'Save file':'保存する';
  if(!dialog.open)dialog.showModal();
+ let sourceUrl=null;
  try{
-  const response=await fetch(apiBase+'/api/material/'+encodeURIComponent(item.id),{headers:{Authorization:'Bearer '+accessToken},cache:'no-store',signal:controller.signal});
+  const metadata=await fetch(apiBase+'/api/material/'+encodeURIComponent(item.id)+'?metadata=1',{headers:{Authorization:'Bearer '+accessToken},cache:'no-store',signal:controller.signal});
+  const source=await metadata.json();if(!metadata.ok)throw new Error(source.error || 'File unavailable');
+  const parsed=new URL(source.url);if(parsed.protocol!=='https:')throw new Error('Invalid file URL');sourceUrl=parsed.href;
+  const response=await fetch(sourceUrl,{cache:'no-store',signal:controller.signal});
   if(!response.ok){const data=await response.json();throw new Error(data.error || 'Download failed');}
   let lastPaint=0;
   const blob=await receiveDownload(response,(received,total)=>{
@@ -153,7 +157,7 @@ async function downloadMaterial(item,button){
   downloadUrl=URL.createObjectURL(blob);const save=$('download-save');save.href=downloadUrl;save.download=item.name || 'download';save.hidden=false;save.click();bar.value=100;
   $('download-heading').textContent=en?'File received':'ファイルを受信しました';text.textContent=en?'Check browser downloads. If saving did not start, choose Save file.':'ブラウザのダウンロード一覧をご確認ください。保存が始まらない場合は「保存する」を押してください。';
   $('material-status').textContent=en?'File received.':'ファイルを受信しました。';
- }catch(error){$('download-heading').textContent=controller.signal.aborted?(en?'Download cancelled':'ダウンロードを中止しました'):(en?'Download failed':'ダウンロードできませんでした');text.textContent=controller.signal.aborted?'':error.message;bar.removeAttribute('value');}
+ }catch(error){if(sourceUrl && !controller.signal.aborted && error instanceof TypeError){const save=$('download-save');save.href=sourceUrl;save.target='_blank';save.rel='noopener noreferrer';save.download=item.name || 'download';save.hidden=false;save.textContent=en?'Download from source':'配布元からダウンロード';$('download-heading').textContent=en?'Download from source':'配布元からダウンロード';text.textContent=en?'Use this link to download directly. Progress appears in your browser downloads.':'配布元から直接取得します。下のボタンを押してください。進捗はブラウザのダウンロード一覧で確認できます。';bar.removeAttribute('value');return;}$('download-heading').textContent=controller.signal.aborted?(en?'Download cancelled':'ダウンロードを中止しました'):(en?'Download failed':'ダウンロードできませんでした');text.textContent=controller.signal.aborted?'':error.message;bar.removeAttribute('value');}
  finally{activeDownload=null;button.disabled=false;$('download-cancel').hidden=true;$('download-close').hidden=false;}
 }
 
@@ -178,7 +182,7 @@ function drawMaterials(){
 for(const lang of ['ja','en'])$('content-lang-'+lang).addEventListener('click',()=>{contentLanguage=lang;$('material-status').textContent='';drawMaterials();});
 async function loadPlaybook(){
   try{
-    const nodes=(await api('/api/playbook')).sections;
+    const nodes=[];if(apiBase.includes('.workers.dev')){for(const key of ['content','ids','trouble','contacts','faq'])nodes.push(...(await api('/api/playbook?section='+key)).sections);}else nodes.push(...(await api('/api/playbook')).sections);
     materialNode=section(nodes,/コンテンツ/);renderTroubles(section(nodes,/トラブル/));displaySection($('contacts'),section(nodes,/緊急連絡先/));
     const menti=section(nodes,/Mentimeter/i);const mentiLink=flatten(menti?.children || []).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://www.mentimeter.com'));mentimeterUrl=mentiLink?.href || 'https://www.mentimeter.com/';
     drawMaterials();

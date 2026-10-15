@@ -13,6 +13,16 @@
 
 ## API
 
+### Cloudflare無料枠への移行
+
+移行先API：`https://tour-playbook-api.furuta-ideas.workers.dev`。`wrangler.jsonc`と`worker.mjs`で、既存APIをCloudflare Workers上で実行する。支払いが必要なストレージやデータベースのバインディングは使用しない。
+
+CloudflareのSecretに`NOTION_TOKEN`、`APP_PASSWORD`、`SESSION_SECRET`を設定する。トークンをGit、公開ファイル、GitHub Pagesへ保存しない。`wrangler deploy`でAPIを公開し、ログインとNotion接続を確認してから`public/app.js`の`apiBase`を移行先へ切り替える。
+
+WorkersではPlaybookを`?section=content|ids|trouble|contacts|faq`で分割取得し、無料枠の1リクエスト当たりの外部呼び出し数を抑える。`DIRECT_DOWNLOADS=1`ではファイル本体を中継しない。認証済み`/api/material/:id?metadata=1`から短期間有効な配布元URLだけを取得し、ブラウザーが配布元へ直接アクセスする。配布元がブラウザーの直接取得を許可する場合は進捗表示付きで保存し、許可しない場合は配布元のリンクを表示する。
+
+ローカル検証：`wrangler dev --local`。デプロイ用アカウントの認証：`wrangler login --device`。CLIの権限はアカウント参照とWorkersの作成・更新に限定する。Renderの設定は移行完了まで旧構成として保持する。
+
 Node.js 22以降、外部npm依存なし。`.env.example`を`.env`へコピーしてNOTION_TOKEN、APP_PASSWORD、SESSION_SECRETを設定し、`npm start`でAPIを起動する。
 
 ログインは正式Pagesオリジンからのみ受け付ける。認証済みAPIには12時間有効な署名付きBearerトークンが必要。トークンは画面のメモリにのみ保持し、Cookie・ローカルストレージには保存しない。CORSは https://furuta-ideas.github.io のみ許可する。
