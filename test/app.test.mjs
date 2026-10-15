@@ -8,6 +8,13 @@ import { fetchJSON, displayedMaterialRows } from '../lib.mjs';
 import { speakingHighlights } from '../lib.mjs';
 import { faqCategoryColor } from '../lib.mjs';
 import { answerLinks } from '../lib.mjs';
+import { participantTotal } from '../lib.mjs';
+
+test('表示対象の人数を合計し、空欄・未定・範囲は推測して加算しない',()=>{
+ const values=['15','２０人','1,000名','0','','未定','10～20','-2'];
+ assert.deepEqual(participantTotal(values.map(value=>({properties:{人数:value}}))),{total:1035,unknown:4});
+ assert.deepEqual(participantTotal([]),{total:0,unknown:0});
+});
 
 test('回答のURLをリンク化し、周囲の句読点と本文を保持する',()=>{
  for(const text of ['資料（https://example.com/a/）です。','See https://example.com/info.html).','https://example.com/page_(test).']){

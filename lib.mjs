@@ -130,6 +130,11 @@ export function answerLinks(text){
 }
 
 export function orderedProperties(properties){const first=['Select','Status','会場','時間枠','人数','主担当','副担当'];return [...first,...Object.keys(properties).filter(k=>!first.includes(k))].filter(k=>!['案件','調整進捗'].includes(k) && properties[k]).map(k=>[k,properties[k]]);}
+export function participantTotal(tours){
+ let total=0,unknown=0;
+ for(const tour of tours){const text=String(tour.properties?.['人数'] ?? '').normalize('NFKC').trim().replaceAll(',','');const match=text.match(/^(\d+(?:\.0+)?)\s*(?:人|名)?$/);const value=match?Number(match[1]):NaN;if(Number.isSafeInteger(value))total+=value;else unknown++;}
+ return {total,unknown};
+}
 export const materialRows=[['lecture','座学','Presentation'],['walk','街歩き','Walking tour'],['full','フルパッケージ','Full package'],['handout','配布用','Handouts'],['menti','Mentimeter','Mentimeter'],['video','動画','Videos'],['script','スクリプト','Script'],['faq','FAQ','FAQ']];
 export const displayedMaterialRows=materialRows.filter(([id])=>!['lecture','walk','video'].includes(id));
 export async function receiveDownload(response,onProgress){

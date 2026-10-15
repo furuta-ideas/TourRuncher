@@ -1,4 +1,4 @@
-import { initialTour, visibleTour, searchFAQ, overviewBlocks, redactOverview, faqCategories, faqCategoryColor, filterFAQCategory, orderedProperties, RecentCache, displayedMaterialRows, fetchJSON, contentMaterials, troubleSections, receiveDownload, speakingHighlights, answerLinks } from './lib.mjs';
+import { initialTour, visibleTour, participantTotal, searchFAQ, overviewBlocks, redactOverview, faqCategories, faqCategoryColor, filterFAQCategory, orderedProperties, RecentCache, displayedMaterialRows, fetchJSON, contentMaterials, troubleSections, receiveDownload, speakingHighlights, answerLinks } from './lib.mjs';
 const $ = id => document.getElementById(id);
 const apiBase='https://tourruncher.onrender.com';
 let accessToken='';
@@ -102,7 +102,7 @@ async function loadTours() {
  try{const data=await api('/api/tours');const selectedId=state.tours[state.selected]?.id;state.tours=data.tours;renderTours(selectedId);
  }catch(error){if(!previous.length){$('tour-count').textContent='取得できません';errorAt($('tour-list'),error);}}
 }
-function renderTours(selectedId){state.tours=state.tours.filter(visibleTour);state.selected=-1;$('tour-count').textContent=`${state.tours.length}件`;$('tour-list').replaceChildren();
+function renderTours(selectedId){state.tours=state.tours.filter(visibleTour);state.selected=-1;const people=participantTotal(state.tours);$('tour-count').textContent=`${state.tours.length}件 ／ 合計${people.total.toLocaleString('ja-JP')}人`;$('tour-count').title=people.unknown?`人数が未入力・未確定の${people.unknown}件は人数合計に含みません。`:'表示中のツアーの人数合計';$('tour-list').replaceChildren();
     if(!state.tours.length){$('tour-list').append(el('p','日付付きのツアー案件はありません。','hint'));$('tour-detail').replaceChildren(el('p','ツアー一覧に案件を追加すると表示されます。','hint'));return;}
     state.tours.reverse();
     state.tours.forEach((t,i)=>{const b=el('button',null,'tour-item');b.type='button';b.title=`${t.title} ${t.properties['時間枠'] || ''}`;b.setAttribute('aria-label',b.title);b.append(el('time',t.date.replaceAll('-','')),el('strong',t.title.replace(/^\s*\d{8}[\s_　-]*/,'')));b.addEventListener('click',()=>{positionTour(i);selectTour(i);});$('tour-list').append(b);});
