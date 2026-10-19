@@ -141,6 +141,17 @@ test('現在のFAQマスター形式からJSONのみ抽出し日英検索',async
   const html=await readFile(new URL('../../index.html',import.meta.url),'utf8').catch(()=> 'const FAQ_DB = [{"id":1,"question":"街の人口","answers":["人口は約14000人"],"question_en":"City population","answers_en":["14000 residents"]}];');
   const rows=parseFAQ(html);assert.ok(rows.length>0);assert.ok(searchFAQ(rows,'人口').length);assert.ok(searchFAQ(rows,'population').length);assert.equal(searchFAQ(rows,'ZZZZQX987654').length,0);assert.throws(()=>parseFAQ('const FAQ_DB = doSomething();'));
 });
+
+test('FAQ本体は公開URLへ依存せずCloudflare KVからのみ配信する',async()=>{
+ const [worker,config,client]=await Promise.all([
+  readFile(new URL('../worker.mjs',import.meta.url),'utf8'),
+  readFile(new URL('../wrangler.jsonc',import.meta.url),'utf8'),
+  readFile(new URL('../public/app.js',import.meta.url),'utf8')
+ ]);
+ assert.match(worker,/env\.FAQ_DB\.get\('current'/);
+ assert.doesNotMatch(config,/FAQ_MASTER_URL|kashiwanoha-tour-guide-faq/);
+ assert.doesNotMatch(client,/kashiwanoha-tour-guide-faq/);
+});
 test('旧パスワード、旧Bearer、偽の内部認証を受け付けない',async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const url='http://127.0.0.1:'+server.address().port;const origin='https://furuta-ideas.github.io';
  try{
