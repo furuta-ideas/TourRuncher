@@ -9,6 +9,8 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.mjs",
     "test": "node --test",
+    "faq:prepare": "node scripts/prepare-faq.mjs",
+    "faq:publish": "wrangler kv key put --binding=FAQ_DB --remote current --path=private-data/faq-db.json",
     "deploy:api": "wrangler deploy",
     "dev:api": "wrangler dev"
   },

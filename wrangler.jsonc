@@ -6,6 +6,7 @@
   "compatibility_flags": ["nodejs_compat", "enable_nodejs_http_server_modules"],
   "workers_dev": true,
   "durable_objects": {"bindings": [{"name":"AUTH_STORE", "class_name":"AuthStore"}]},
+  "kv_namespaces": [{"binding":"FAQ_DB", "id":"b7f5a34bafb543acad5003f47dda0f7b"}],
   "migrations": [{"tag":"auth-v1", "new_sqlite_classes":["AuthStore"]}],
   "vars": {
     "CLOUDFLARE_WORKER": "1",
@@ -16,7 +17,6 @@
     "CF_ACCESS_AUD": "ae08ccf895469a12ebdd9975ad2a5cffaa1ac889797b9e966c6eeb0546c16732",
     "CF_ACCESS_MFA_CONFIRMED": "1",
     "PLAYBOOK_ID": "2d2cbc412aed8006b7bbf5b2a26b018a",
-    "TOUR_SOURCE_ID": "284cbc41-2aed-8052-84c5-000b8c68d91c",
-    "FAQ_MASTER_URL": "https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/"
+    "TOUR_SOURCE_ID": "284cbc41-2aed-8052-84c5-000b8c68d91c"
   }
 }

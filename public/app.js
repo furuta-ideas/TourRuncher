@@ -72,7 +72,7 @@ function clearPrivateData(){
  recent.entries.clear();rolesCache=null;materialNode=null;state.detailCache.clear();state.tours=[];state.faq=[];state.matches=[];state.selected=-1;state.detailSequence++;state.faqSequence++;
  activeDownload?.abort();releaseDownload();
  for(const id of ['tour-list','tour-properties','tour-detail','materials','roles','faq-results','faq-categories','troubles','contacts','trouble-guides'])$(id).replaceChildren();
- $('tour-title').textContent='案件を選択';$('tour-count').textContent='';$('tour-link').removeAttribute('href');$('tour-link').hidden=true;$('faq-master').removeAttribute('href');
+ $('tour-title').textContent='案件を選択';$('tour-count').textContent='';$('tour-link').removeAttribute('href');$('tour-link').hidden=true;
  $('faq-query').value='';$('download-filename').textContent='';
  $('signed-in-email').textContent='';$('tour-badge').textContent='';$('tour-badge').hidden=true;
  document.querySelectorAll('dialog[open]').forEach(d=>d.close());
@@ -243,9 +243,6 @@ async function loadPlaybook(){
     materialNode=section(nodes,/コンテンツ/);renderTroubles(section(nodes,/トラブル/));displaySection($('contacts'),section(nodes,/緊急連絡先/));
     const menti=section(nodes,/Mentimeter/i);const mentiLink=flatten(menti?.children || []).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://www.mentimeter.com'));mentimeterUrl=mentiLink?.href || 'https://www.mentimeter.com/';
     drawMaterials();
-    const faq=section(nodes,/ＦＡＱアプリ|FAQアプリ/);
-    if(faq){const url=flatten(faq.children).flatMap(n=>n.rich || []).find(r=>r.href?.startsWith('https://'));if(url)$('faq-master').href=url.href;}
-    $('faq-master').href||= 'https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/';
   }catch(error){for(const id of ['materials','troubles','contacts','trouble-guides'])errorAt($(id),error);}
 }
 function load(){ $('today').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(new Date());loadTours();loadPlaybook();loadCategories(); }
@@ -253,9 +250,9 @@ $('roles-button').addEventListener('click',async()=>{const target=$('roles');if(
 let faqTimer;
 async function faqSearch() {
   const query=$('faq-query').value.trim();const category=state.category;const seq=++state.faqSequence;state.limit=4;
-  if(!query && !category){state.matches=[];drawFAQ();$('faq-status').textContent='FAQマスターの最新データから検索します。';return;}
+  if(!query && !category){state.matches=[];drawFAQ();$('faq-status').textContent='FAQデータベースの最新データから検索します。';return;}
   $('faq-status').textContent='最新のFAQから検索しています…';
-  try{const data=await api('/api/faq');if(seq!==state.faqSequence)return;state.faq=data.rows;state.matches=category?filterFAQCategory(state.faq,category):searchFAQ(state.faq,query);renderCategories();$('faq-master').href=data.source;drawFAQ();}catch(error){if(seq===state.faqSequence){$('faq-status').textContent=error.message;$('faq-results').replaceChildren();$('faq-more').hidden=true;}}
+  try{const data=await api('/api/faq');if(seq!==state.faqSequence)return;state.faq=data.rows;state.matches=category?filterFAQCategory(state.faq,category):searchFAQ(state.faq,query);renderCategories();drawFAQ();}catch(error){if(seq===state.faqSequence){$('faq-status').textContent=error.message;$('faq-results').replaceChildren();$('faq-more').hidden=true;}}
 }
 $('faq-form').addEventListener('submit',e=>{e.preventDefault();clearTimeout(faqTimer);state.category=null;renderCategories();faqSearch();});
 $('faq-query').addEventListener('input',()=>{clearTimeout(faqTimer);state.category=null;renderCategories();++state.faqSequence;faqTimer=setTimeout(faqSearch,450);});

@@ -2,11 +2,11 @@ import http from 'node:http';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { plain, tour, orderTours, parseFAQ, overviewBlocks, redactOverview } from './lib.mjs';
+import { plain, tour, orderTours, overviewBlocks, redactOverview } from './lib.mjs';
 
 const env = process.env;
 let secret = env.SESSION_SECRET;
-const master = env.FAQ_MASTER_URL || 'https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/';
+const faqDataPath = env.FAQ_DATA_PATH;
 const pageId = env.PLAYBOOK_ID || '2d2cbc412aed8006b7bbf5b2a26b018a';
 const sourceId = env.TOUR_SOURCE_ID || '284cbc41-2aed-8052-84c5-000b8c68d91c';
 const materialFiles=new Map();
@@ -126,9 +126,11 @@ export const server = http.createServer(async(req,res) => {
       if(materialId)return await downloadMaterial(materialId,res,url.searchParams.get('metadata')==='1');
       if(url.pathname==='/api/tours') return json(res,200,{tours:await tours()});
       if(url.pathname==='/api/faq') {
-        const response=await fetch(master,{cache:'no-store',signal:AbortSignal.timeout(20000),headers:{'Cache-Control':'no-cache'}});
-        if(!response.ok) throw new Error('FAQマスターに接続できません。');
-        return json(res,200,{rows:parseFAQ(await response.text()),source:master});
+        if(!faqDataPath)return json(res,503,{error:'FAQデータベースが設定されていません。'});
+        const {readFile}=await import('node:fs/promises');
+        const data=JSON.parse(await readFile(faqDataPath,'utf8'));
+        if(!Array.isArray(data.records))throw new Error('FAQデータベースの形式が不正です。');
+        return json(res,200,{rows:data.records,meta:{version:data.version,updatedAt:data.updatedAt,count:data.records.length}});
       }
       const id=url.pathname.match(/^\/api\/tour\/([0-9a-f-]{32,36})$/i)?.[1];
       if(id) {

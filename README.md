@@ -4,6 +4,19 @@
 
 正式URL：https://furuta-ideas.github.io/TourRuncher/
 
+## FAQデータベース
+
+FAQデータは公開HTMLから取得せず、Cloudflare KVの非公開名前空間 `FAQ_DB` に保存します。`/api/faq` はCloudflare AccessとNotion ACLの本人確認後にだけデータを返します。データ本体をGitへコミットしないため、`private-data/` は`.gitignore`の対象です。
+
+更新手順：
+
+```powershell
+node scripts/prepare-faq.mjs <FAQを含むindex.htmlまたはJSON> <バージョン>
+wrangler kv key put --binding=FAQ_DB --remote current --path=private-data/faq-db.json
+```
+
+変換時に、空の質問・回答、ID重複、カテゴリー形式を検査します。KVにはスキーマ版、DB版、更新日時、件数を含めて保存します。
+
 ## 公開構成
 
 - GitHub Pages：画面、JavaScript、CSS、アイコン、オープニング画像を配信。
