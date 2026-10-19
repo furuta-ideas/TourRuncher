@@ -6,13 +6,15 @@ export { AuthStore } from './auth-object.mjs';
 const handler=httpServerHandler(server);
 function apiJSON(request,status,body){
   const origin=request.headers.get('Origin');
+  let appOrigin='';
+  try{appOrigin=new URL(process.env.APP_URL).origin;}catch{}
   const headers={
     'Content-Type':'application/json; charset=utf-8',
     'Cache-Control':'private, no-store',
     'Strict-Transport-Security':'max-age=31536000',
     'X-Content-Type-Options':'nosniff'
   };
-  if(origin===process.env.APP_URL){headers['Access-Control-Allow-Origin']=origin;headers.Vary='Origin';}
+  if(origin===appOrigin){headers['Access-Control-Allow-Origin']=origin;headers.Vary='Origin';}
   return new Response(JSON.stringify(body),{status,headers});
 }
 async function privateFAQ(request,env){

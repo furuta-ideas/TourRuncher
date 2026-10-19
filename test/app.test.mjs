@@ -149,6 +149,7 @@ test('FAQ本体は公開URLへ依存せずCloudflare KVからのみ配信する'
   readFile(new URL('../public/app.js',import.meta.url),'utf8')
  ]);
  assert.match(worker,/env\.FAQ_DB\.get\('current'/);
+ assert.match(worker,/new URL\(process\.env\.APP_URL\)\.origin/);
  assert.doesNotMatch(config,/FAQ_MASTER_URL|kashiwanoha-tour-guide-faq/);
  assert.doesNotMatch(client,/kashiwanoha-tour-guide-faq/);
 });
