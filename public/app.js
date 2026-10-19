@@ -1,6 +1,7 @@
 import { initialTour, visibleTour, participantTotal, searchFAQ, overviewBlocks, redactOverview, faqCategories, faqCategoryColor, filterFAQCategory, orderedProperties, RecentCache, displayedMaterialRows, fetchJSON, contentMaterials, troubleSections, receiveDownload, speakingHighlights, answerLinks } from './lib.mjs';
 const $ = id => document.getElementById(id);
 const apiBase='https://tour-playbook-api.furuta-ideas.workers.dev';
+const manualLogoutKey='playbook-require-manual-login';
 let accessToken='';
 // Private content is cached only in this authenticated page's memory.
 try{for(const key of ['tour-recent-v1','tour-recent-v2','tour-roles-v1'])localStorage.removeItem(key);}catch{}
@@ -62,10 +63,15 @@ document.querySelectorAll('[role=tab]').forEach((b,index,buttons)=>{
   b.addEventListener('keydown',e=>{let i;if(e.key==='ArrowRight')i=(index+1)%buttons.length;if(e.key==='ArrowLeft')i=(index+buttons.length-1)%buttons.length;if(e.key==='Home')i=0;if(e.key==='End')i=buttons.length-1;if(i!=null){e.preventDefault();buttons[i].focus();tab(buttons[i].dataset.tab);}});
 });
 const image=$('opening').querySelector('img');
+const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function opening() {
-  await Promise.race([image.decode().catch(()=>{}),new Promise(r=>setTimeout(r,3000))]);
-  await new Promise(r=>setTimeout(r,3000));$('opening').classList.add('fade');
-  await new Promise(r=>setTimeout(r,800));$('opening').hidden=true;
+  await delay(1000);
+  $('login').hidden=false;$('login').classList.add('login-over-opening');
+  await delay(3000);
+  $('opening').classList.add('fade');$('login').classList.remove('login-over-opening');
+  let manual=false;try{manual=localStorage.getItem(manualLogoutKey)==='1';}catch{}
+  if(!manual)startLogin();
+  await delay(800);$('opening').hidden=true;
 }
 function clearPrivateData(){
  for(const c of controllers)c.abort();controllers.clear();pending.clear();
@@ -79,9 +85,10 @@ function clearPrivateData(){
 }
 function endSession(message){accessToken='';authExpires=0;sessionExpires=0;clearPrivateData();$('app').hidden=true;$('login').hidden=false;$('login-error').textContent=message;$('login-button').disabled=false;}
 function randomAuth(){const bytes=crypto.getRandomValues(new Uint8Array(32));return btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');}
-async function startLogin(){
+async function startLogin(userInitiated=false){
  if(authBusy)return;authBusy=true;$('login-button').disabled=true;$('login-error').textContent='';$('login-status').textContent='本人確認画面を開きます…';
  try{
+  if(userInitiated)try{localStorage.removeItem(manualLogoutKey);}catch{}
   const verifier=randomAuth(),state=randomAuth();
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
   const challenge=btoa(String.fromCharCode(...new Uint8Array(digest))).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
@@ -100,17 +107,17 @@ async function resumeLogin(){
   if(!response.ok)throw new Error(data.error || '本人確認を完了できません。');
   if(!data.token || data.expires<=Date.now())throw new Error('本人確認を完了できません。');
   accessToken=data.token;authExpires=data.expires;sessionExpires=data.sessionExpires;
-  try{localStorage.setItem('playbook-personal','1');}catch{}
+  try{localStorage.setItem('playbook-personal','1');localStorage.removeItem(manualLogoutKey);}catch{}
   $('signed-in-email').textContent=data.email;$('login').hidden=true;$('app').hidden=false;tab('prep');load();return true;
  }catch(e){endSession(e.message);return true;}
 }
-$('login-form').addEventListener('submit',e=>{e.preventDefault();startLogin();});
-async function logout(all=false){
- const token=accessToken;endSession('ログアウトしました。');try{localStorage.removeItem('playbook-personal');}catch{}
- try{const r=await fetch(apiBase+'/auth/logout',{method:'POST',cache:'no-store',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({all})});if(!r.ok)throw new Error();location.assign(apiBase+'/auth/clear');}
+$('login-form').addEventListener('submit',e=>{e.preventDefault();startLogin(true);});
+async function logout(){
+ const token=accessToken;endSession('ログアウトしました。');try{localStorage.removeItem('playbook-personal');localStorage.setItem(manualLogoutKey,'1');}catch{}
+ try{const r=await fetch(apiBase+'/auth/logout',{method:'POST',cache:'no-store',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({all:false})});if(!r.ok)throw new Error();location.assign(apiBase+'/auth/clear');}
  catch{$('login-error').textContent='端末の表示データは削除しましたが、サーバーのログアウトを確認できません。再接続後に再度お試しください。';}
 }
-$('logout-button').addEventListener('click',()=>logout());$('logout-all').addEventListener('click',()=>logout(true));
+$('logout-button').addEventListener('click',logout);
 async function sessionCheck(){
  if(!accessToken || sessionBusy || document.hidden)return;sessionBusy=true;
  try{
@@ -126,8 +133,7 @@ addEventListener('pagehide',()=>{accessToken='';clearPrivateData();$('app').hidd
 addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
 (async()=>{
  if(location.hash.includes('auth_code=')){$('opening').hidden=true;await resumeLogin();return;}
- await opening();$('login').hidden=false;
- try{if(localStorage.getItem('playbook-personal')==='1')await startLogin();}catch{}
+ await opening();
 })();
 function positionTour(index) {
   const item=$('tour-list').children[index];if(item)$('tour-list').scrollTop=item.offsetTop-($('tour-list').clientHeight-item.offsetHeight)/2;
