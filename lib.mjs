@@ -4,12 +4,13 @@ export async function fetchJSON(url,options={},settings={}) {
  for(let attempt=0;;attempt++){
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
-   const response=await fetch(url,{...options,signal:controller.signal});
+   const response=await fetch(url,{...options,signal:options.signal?AbortSignal.any([controller.signal,options.signal]):controller.signal});
    const data=await response.json().catch(()=>null);
    if([502,503,504].includes(response.status) && attempt<retries){onRetry();continue;}
    if(!data)throw new Error('サーバーに接続できません。少し待って再度お試しください。');
    return {response,data};
   }catch(error){
+   if(options.signal?.aborted)throw new Error('ログイン状態が変更されました。');
    if((controller.signal.aborted || error instanceof TypeError) && attempt<retries){onRetry();continue;}
    if(controller.signal.aborted)throw new Error('接続に時間がかかっています。再度ログインしてください。');
    if(error instanceof TypeError)throw new Error('通信できません。ネットワーク接続を確認して再度お試しください。');

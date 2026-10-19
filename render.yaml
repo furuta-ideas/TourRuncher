@@ -16,7 +16,5 @@ services:
         value: 22.16.0
       - key: NOTION_TOKEN
         sync: false
-      - key: APP_PASSWORD
-        sync: false
       - key: SESSION_SECRET
         generateValue: true

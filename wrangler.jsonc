@@ -5,9 +5,13 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat", "enable_nodejs_http_server_modules"],
   "workers_dev": true,
+  "durable_objects": {"bindings": [{"name":"AUTH_STORE", "class_name":"AuthStore"}]},
+  "migrations": [{"tag":"auth-v1", "new_sqlite_classes":["AuthStore"]}],
   "vars": {
     "CLOUDFLARE_WORKER": "1",
     "DIRECT_DOWNLOADS": "1",
+    "APP_URL": "https://furuta-ideas.github.io/TourRuncher/",
+    "ACL_SOURCE_ID": "3fdcbc41-2aed-80e5-a91e-000b1d60d3fb",
     "PLAYBOOK_ID": "2d2cbc412aed8006b7bbf5b2a26b018a",
     "TOUR_SOURCE_ID": "284cbc41-2aed-8052-84c5-000b8c68d91c",
     "FAQ_MASTER_URL": "https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/"
