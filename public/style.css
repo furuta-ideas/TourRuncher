@@ -133,6 +133,7 @@ nav button span{font-size:16px}
 
 .opening-title{white-space:nowrap;font-size:clamp(12px,3.7vw,60px);letter-spacing:0;left:2%;right:2%}
 #login-status{min-height:24px;margin:12px 0 0;text-align:center}
+.login-over-opening{position:fixed;inset:0;z-index:20;background:transparent!important;min-height:100dvh!important}.login-over-opening .login-card{box-shadow:0 30px 100px #0009,inset 0 1px #fff}.security-badge{display:table;margin:0 auto 14px;padding:6px 14px;border-radius:999px;color:#fff;background:linear-gradient(135deg,#0a806c,#19a988);box-shadow:0 4px 12px #08705c38;font-weight:900;letter-spacing:.08em}
 
 .material-icon.pdf{background:linear-gradient(135deg,#ef4c47,#b51d2a)}
 #app .material-icon.pdf>span{font-size:12px!important}
