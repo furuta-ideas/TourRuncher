@@ -153,3 +153,4 @@ nav button span{font-size:16px}
 
 #app .faq-card h3{color:#175bb5}
 #app .faq-card .faq-answer-link{color:#175bb5;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+:root .personal-device{display:flex;align-items:center;gap:10px;line-height:1.5}:root .personal-device input{width:22px;height:22px;flex:none;margin:0}.account-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;font-size:10pt}.account-actions button{padding:6px 10px;border:1px solid #c6d6dd;border-radius:9px;background:#fff;color:#264757}.account-actions span{max-width:220px;overflow:hidden;text-overflow:ellipsis}

@@ -9,7 +9,6 @@ let secret = env.SESSION_SECRET;
 const master = env.FAQ_MASTER_URL || 'https://furuta-ideas.github.io/kashiwanoha-tour-guide-faq/';
 const pageId = env.PLAYBOOK_ID || '2d2cbc412aed8006b7bbf5b2a26b018a';
 const sourceId = env.TOUR_SOURCE_ID || '284cbc41-2aed-8052-84c5-000b8c68d91c';
-const attempts = new Map();
 const materialFiles=new Map();
 function registerMaterials(nodes){
  function scan(items,inContent=false){for(const n of items){const allowed=inContent || (n.type==='toggle' && /コンテンツ/.test(n.text || ''));if(allowed && ['file','video','audio','pdf'].includes(n.type) && n.url)materialFiles.set(n.id,n);scan(n.children || [],allowed);}}
@@ -31,12 +30,12 @@ async function downloadMaterial(id,res,metadata=false){
  res.writeHead(200,{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename="download${extension}"; filename*=UTF-8''${encodeURIComponent(filename).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16))}`,'Cache-Control':'no-store',...(response.headers.get('content-length')?{'Content-Length':response.headers.get('content-length')}:{})});
  await pipeline(Readable.fromWeb(response.body),res);
 }
-const sign = text => createHmac('sha256', secret).update(text).digest('base64url');
 const equal = (a,b) => Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b));
-function authenticated(req, suppliedToken) {
-  const token = suppliedToken ?? req.headers.authorization?.match(/^Bearer ([A-Za-z0-9_.-]+)$/)?.[1] ?? '';
-  const [expiry, nonce, signature] = token.split('.');
-  return !!signature && +expiry > Date.now() && equal(sign(`${expiry}.${nonce}`), signature);
+function authenticated(req) {
+  const [issued,nonce,signature]=(req.headers['x-playbook-internal-proof'] || '').split('.');
+  if(!signature || !/^[A-Za-z0-9_-]{43}$/.test(nonce || '') || !Number.isFinite(+issued) || Math.abs(Date.now()-Number(issued))>10000)return false;
+  const expected=createHmac('sha256',secret).update(`playbook-internal-v2\n${req.method}\n${req.url}\n${issued}.${nonce}`).digest('base64url');
+  return equal(expected,signature);
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));
 let queue = Promise.resolve();
@@ -99,7 +98,6 @@ async function tours() {
   return orderTours(all);
 }
 function json(res,status,data) { res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}); res.end(JSON.stringify(data)); }
-async function body(req) { let text=''; for await(const chunk of req) { text+=chunk; if(text.length>2048) throw new Error('入力が長すぎます。'); } return JSON.parse(text || '{}'); }
 export const server = http.createServer(async(req,res) => {
   res.setHeader('X-Content-Type-Options','nosniff'); res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
@@ -112,29 +110,9 @@ export const server = http.createServer(async(req,res) => {
     secret ||= env.SESSION_SECRET || randomBytes(32).toString('hex');
     if(url.pathname==='/health') return json(res,200,{ok:true});
     if(req.headers.origin && !pagesRequest && url.pathname.startsWith('/api/'))return json(res,403,{error:'アクセス元を確認できません。'});
-    if(url.pathname==='/api/login' && req.method==='POST') {
-      if (!pagesRequest) return json(res,403,{error:'アクセス元を確認できません。'});
-      const key=req.socket.remoteAddress;
-      const now=Date.now();
-      for (const [ip,value] of attempts) if(value.until<now) attempts.delete(ip);
-      const entry=attempts.get(key) || {count:0,until:now+60000};
-      if(entry.count>=5) return json(res,429,{error:'入力回数を超えました。1分後にお試しください。'});
-      const input=await body(req);
-      if(typeof input.password!=='string' || !equal(input.password,env.APP_PASSWORD || '2026')) { entry.count++; attempts.set(key,entry); return json(res,401,{error:'パスワードが違います。'}); }
-      attempts.delete(key);
-      const value=`${now+12*60*60*1000}.${randomBytes(16).toString('hex')}`;
-      return json(res,200,{ok:true,token:`${value}.${sign(value)}`});
-    }
+    if(url.pathname==='/api/login')return json(res,410,{error:'パスワードによるログインは終了しました。'});
     if(url.pathname.startsWith('/api/')) {
-      const postedMaterial=url.pathname.match(/^\/api\/material\/([0-9a-f-]{32,36})$/i)?.[1];
-      if(postedMaterial && req.method==='POST'){
-        if(!pagesRequest)return json(res,403,{error:'アクセス元を確認できません。'});
-        let text='';for await(const chunk of req){text+=chunk;if(text.length>2048)return json(res,413,{error:'入力が長すぎます。'});}
-        const token=new URLSearchParams(text).get('token') || '';
-        if(!authenticated(req,token))return json(res,401,{error:'パスワードを入力してください。'});
-        return await downloadMaterial(postedMaterial,res);
-      }
-      if(!authenticated(req)) return json(res,401,{error:'パスワードを入力してください。'});
+      if(!authenticated(req)) return json(res,401,{error:'本人確認が必要です。'});
       if(req.method!=='GET') return json(res,405,{error:'この操作は使用できません。'});
       if(url.pathname==='/api/roles') return json(res,200,{sections:await sections(/役割分担.*事前準備/)});
       if(url.pathname==='/api/playbook'){

@@ -2,11 +2,11 @@ import { initialTour, visibleTour, participantTotal, searchFAQ, overviewBlocks, 
 const $ = id => document.getElementById(id);
 const apiBase='https://tour-playbook-api.furuta-ideas.workers.dev';
 let accessToken='';
-function saved(key,fallback){try{return JSON.parse(localStorage.getItem(key)) || fallback;}catch{return fallback;}}
-function save(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{}}
-try{localStorage.removeItem('tour-recent-v1');}catch{}
-const recent=new RecentCache(10,saved('tour-recent-v2',[]));
-let rolesCache=saved('tour-roles-v1',null);
+// Private content is cached only in this authenticated page's memory.
+try{for(const key of ['tour-recent-v1','tour-recent-v2','tour-roles-v1'])localStorage.removeItem(key);}catch{}
+const recent=new RecentCache(10);
+let rolesCache=null,authExpires=0,sessionExpires=0,sessionBusy=false,authBusy=false;
+const controllers=new Set();
 const pending=new Map();
 const state = { tours:[], selected:-1, detailCache:new Map(), lang:'ja', faq:[], matches:[], limit:4, faqSequence:0, detailSequence:0, category:null };
 function el(tag, text, className) { const n=document.createElement(tag); if(text!=null)n.textContent=text; if(className)n.className=className; return n; }
@@ -43,8 +43,11 @@ async function api(path,options) {
  const requestToken=accessToken;const key=(!options || !options.method || options.method==='GET')?requestToken+':'+path:null;
  if(key && pending.has(key))return pending.get(key);
  const job=(async()=>{const headers={...options?.headers,...(requestToken?{Authorization:'Bearer '+requestToken}:{})};
- const {response:r,data}=await fetchJSON(apiBase+path,{cache:'no-store',...options,headers},path==='/api/login'?{timeoutMs:60000,retries:1,onRetry:()=>{$('login-status').textContent='サーバーに再接続しています…';}}:{});
- if(!r.ok){if(r.status===401 && path!='/api/login' && requestToken===accessToken && requestToken){accessToken='';$('app').hidden=true;$('login').hidden=false;$('login-error').textContent='ログインの有効期限が切れました。再度ログインしてください。';$('password').focus();}throw new Error(data.error || '情報を取得できませんでした。');}return data;})();
+ const controller=new AbortController();controllers.add(controller);
+ let result;try{result=await fetchJSON(apiBase+path,{cache:'no-store',...options,headers,signal:controller.signal});}finally{controllers.delete(controller);}
+ const {response:r,data}=result;
+ if(requestToken!==accessToken)throw new Error('ログイン状態が変更されました。');
+ if(!r.ok){if([401,403,503].includes(r.status) && requestToken)endSession(data.error || '再度ログインしてください。');throw new Error(data.error || '情報を取得できませんでした。');}return data;})();
  if(key)pending.set(key,job);try{return await job;}finally{if(key)pending.delete(key);}
 }
 function today() {return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
@@ -62,22 +65,76 @@ const image=$('opening').querySelector('img');
 async function opening() {
   await Promise.race([image.decode().catch(()=>{}),new Promise(r=>setTimeout(r,3000))]);
   await new Promise(r=>setTimeout(r,3000));$('opening').classList.add('fade');
-  await new Promise(r=>setTimeout(r,800));$('opening').hidden=true;$('login').hidden=false;$('password').focus();
+  await new Promise(r=>setTimeout(r,800));$('opening').hidden=true;
 }
-opening();
-$('login-form').addEventListener('submit',async e=>{
- e.preventDefault();const b=e.target.querySelector('button');if(b.disabled)return;b.disabled=true;b.textContent='ログイン中…';$('login-error').textContent='';$('login-status').textContent='接続しています…';
- const waiting=setTimeout(()=>{$('login-status').textContent='サーバーを起動しています。しばらくお待ちください…';},5000);
- try{const login=await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value.normalize('NFKC').trim()})});if(typeof login.token!=='string' || !login.token)throw new Error('ログインを確認できませんでした。再度お試しください。');accessToken=login.token;$('password').value='';$('login').hidden=true;$('app').hidden=false;tab('prep');load();}
- catch(error){$('login-error').textContent=error.message;}
- finally{clearTimeout(waiting);b.disabled=false;b.textContent='ログイン';$('login-status').textContent='';}
-});
+function clearPrivateData(){
+ for(const c of controllers)c.abort();controllers.clear();pending.clear();
+ recent.entries.clear();rolesCache=null;materialNode=null;state.detailCache.clear();state.tours=[];state.faq=[];state.matches=[];state.selected=-1;state.detailSequence++;state.faqSequence++;
+ activeDownload?.abort();releaseDownload();
+ for(const id of ['tour-list','tour-properties','tour-detail','materials','roles','faq-results','faq-categories','troubles','contacts','trouble-guides'])$(id).replaceChildren();
+ $('tour-title').textContent='案件を選択';$('tour-count').textContent='';$('tour-link').removeAttribute('href');$('tour-link').hidden=true;$('faq-master').removeAttribute('href');
+ $('faq-query').value='';$('download-filename').textContent='';
+ $('signed-in-email').textContent='';$('tour-badge').textContent='';$('tour-badge').hidden=true;
+ document.querySelectorAll('dialog[open]').forEach(d=>d.close());
+}
+function endSession(message){accessToken='';authExpires=0;sessionExpires=0;clearPrivateData();$('app').hidden=true;$('login').hidden=false;$('login-error').textContent=message;$('login-button').disabled=false;}
+function randomAuth(){const bytes=crypto.getRandomValues(new Uint8Array(32));return btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');}
+async function startLogin(personal=$('personal-device').checked){
+ if(authBusy)return;authBusy=true;$('login-button').disabled=true;$('login-error').textContent='';$('login-status').textContent='本人確認画面を開きます…';
+ try{
+  const verifier=randomAuth(),state=randomAuth();
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
+  const challenge=btoa(String.fromCharCode(...new Uint8Array(digest))).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
+  sessionStorage.setItem('playbook-auth-flow',JSON.stringify({verifier,state,created:Date.now(),personal}));
+  const url=new URL(apiBase+'/auth/start');url.search=new URLSearchParams({challenge,state,personal:personal?'1':'0'});location.assign(url.href);
+ }catch{authBusy=false;$('login-button').disabled=false;$('login-error').textContent='本人確認を開始できません。ブラウザの保存設定を確認して再度お試しください。';}
+}
+async function resumeLogin(){
+ const params=new URLSearchParams(location.hash.slice(1));
+ if(!params.has('auth_code'))return false;
+ history.replaceState(null,'',location.pathname+location.search);
+ try{
+  const flow=JSON.parse(sessionStorage.getItem('playbook-auth-flow') || 'null');sessionStorage.removeItem('playbook-auth-flow');
+  if(!flow || flow.state!==params.get('state') || Date.now()-flow.created>600000)throw new Error('ログイン操作の有効期限が切れました。再度ログインしてください。');
+  const {response,data}=await fetchJSON(apiBase+'/auth/exchange',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:params.get('auth_code'),verifier:flow.verifier})});
+  if(!response.ok)throw new Error(data.error || '本人確認を完了できません。');
+  if(!data.token || data.expires<=Date.now())throw new Error('本人確認を完了できません。');
+  accessToken=data.token;authExpires=data.expires;sessionExpires=data.sessionExpires;
+  try{if(flow.personal)localStorage.setItem('playbook-personal','1');else localStorage.removeItem('playbook-personal');}catch{}
+  $('signed-in-email').textContent=data.email;$('login').hidden=true;$('app').hidden=false;tab('prep');load();return true;
+ }catch(e){endSession(e.message);return true;}
+}
+$('login-form').addEventListener('submit',e=>{e.preventDefault();startLogin();});
+async function logout(all=false){
+ const token=accessToken;endSession('ログアウトしました。');try{localStorage.removeItem('playbook-personal');}catch{}
+ try{const r=await fetch(apiBase+'/auth/logout',{method:'POST',cache:'no-store',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({all})});if(!r.ok)throw new Error();location.assign(apiBase+'/auth/clear');}
+ catch{$('login-error').textContent='端末の表示データは削除しましたが、サーバーのログアウトを確認できません。再接続後に再度お試しください。';}
+}
+$('logout-button').addEventListener('click',()=>logout());$('logout-all').addEventListener('click',()=>logout(true));
+async function sessionCheck(){
+ if(!accessToken || sessionBusy || document.hidden)return;sessionBusy=true;
+ try{
+  if(sessionExpires<=Date.now())return endSession('ログインの有効期限が切れました。再度ログインしてください。');
+  if(authExpires-Date.now()<30000){const personal=(()=>{try{return localStorage.getItem('playbook-personal')==='1';}catch{return false;}})();endSession('ログイン状態を確認しています…');await startLogin(personal);return;}
+  await api('/auth/session');
+ }catch(e){if(accessToken)endSession(e.message);}
+ finally{sessionBusy=false;}
+}
+setInterval(sessionCheck,30000);document.addEventListener('visibilitychange',sessionCheck);
+// Safari may restore the entire page from its back/forward cache. Hide private UI before freezing.
+addEventListener('pagehide',()=>{accessToken='';clearPrivateData();$('app').hidden=true;});
+addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
+(async()=>{
+ if(location.hash.includes('auth_code=')){$('opening').hidden=true;await resumeLogin();return;}
+ await opening();$('login').hidden=false;
+ try{if(localStorage.getItem('playbook-personal')==='1')await startLogin(true);}catch{}
+})();
 function positionTour(index) {
   const item=$('tour-list').children[index];if(item)$('tour-list').scrollTop=item.offsetTop-($('tour-list').clientHeight-item.offsetHeight)/2;
 }
 new ResizeObserver(()=>{const list=$('tour-list');if(list.clientHeight){list.style.setProperty('--row',list.clientHeight/3+'px');if(state.selected>=0)positionTour(state.selected);}}).observe($('tour-list'));
 async function selectTour(index) {
-  let t=state.tours[index];if(!t || state.selected===index)return;let cached=recent.get(t.id);if(!cached?.overview)cached=null;if(t.cached && cached)t=cached.tour;recent.set(t.id,cached || {tour:t,overview:null});save('tour-recent-v2',recent.serialize());
+  let t=state.tours[index];if(!t || state.selected===index)return;let cached=recent.get(t.id);if(!cached?.overview)cached=null;if(t.cached && cached)t=cached.tour;recent.set(t.id,cached || {tour:t,overview:null});
   state.selected=index;const seq=++state.detailSequence;
   Array.from($('tour-list').children).forEach((b,i)=>b.setAttribute('aria-current',String(i===index)));
   $('tour-title').textContent=t.title;$('tour-badge').hidden=false;$('tour-badge').textContent=t.date===today()?'本日のツアー':t.date>today()?'今後のツアー':'過去のツアー';
@@ -87,8 +144,8 @@ async function selectTour(index) {
   const overview=el('div',null,'notion-content');const draw=nodes=>{overview.replaceChildren();if(nodes?.length){const safe=redactOverview(nodes);renderBlocks(safe,overview);if(JSON.stringify(safe).includes("（非表示）"))overview.append(el("p","※非表示情報は「詳細を開く」で確認できます。","hint"));}else overview.append(el('p','実施概要の記載はありません。','hint'));};if(cached)draw(cached.overview);else overview.append(el('p','実施概要を取得しています…','loading'));
   $('tour-properties').replaceChildren(dl);$('tour-detail').replaceChildren(overview);
   try{const data=await api('/api/tour/'+t.id+(cached?.version && Date.now()-(cached.savedAt || 0)<45*60*1000?'?version='+encodeURIComponent(cached.version):''));
-    if(data.notModified){if(recent.entries.has(t.id)){recent.entries.set(t.id,cached);save('tour-recent-v2',recent.serialize());}return;}
-    const selected=redactOverview(data.overview || overviewBlocks(data.blocks || []));const updated={tour:data.tour || t,overview:selected,version:data.version,savedAt:Date.now()};if(recent.entries.has(t.id)){recent.entries.set(t.id,updated);save('tour-recent-v2',recent.serialize());}
+    if(data.notModified){if(recent.entries.has(t.id)){recent.entries.set(t.id,cached);}return;}
+    const selected=redactOverview(data.overview || overviewBlocks(data.blocks || []));const updated={tour:data.tour || t,overview:selected,version:data.version,savedAt:Date.now()};if(recent.entries.has(t.id)){recent.entries.set(t.id,updated);}
     if(seq!==state.detailSequence)return;
     if(JSON.stringify(cached?.overview)!==JSON.stringify(selected))draw(selected);
     if(data.tour){const dl=el('dl',null,'properties');for(const [k,v] of orderedProperties(data.tour.properties)){const cell=el('div',null,'property');cell.title=k+'：'+v;cell.append(el('dt',k),el('dd',v));dl.append(cell);}$('tour-properties').replaceChildren(dl);}
@@ -192,7 +249,7 @@ async function loadPlaybook(){
   }catch(error){for(const id of ['materials','troubles','contacts','trouble-guides'])errorAt($(id),error);}
 }
 function load(){ $('today').textContent=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(new Date());loadTours();loadPlaybook();loadCategories(); }
-$('roles-button').addEventListener('click',async()=>{const target=$('roles');if(rolesCache)displaySection(target,rolesCache);else target.replaceChildren(el('p','読み込み中…','loading'));$('roles-dialog').showModal();try{const data=await api('/api/roles');const latest=section(data.sections,/役割分担/);if(JSON.stringify(latest)!==JSON.stringify(rolesCache)){rolesCache=latest;save('tour-roles-v1',latest);displaySection(target,latest);}}catch(error){if(rolesCache)target.append(el('p','最新情報を確認できませんでした。キャッシュを表示中です。','hint'));else errorAt(target,error);}});$('roles-close').addEventListener('click',()=>$('roles-dialog').close());
+$('roles-button').addEventListener('click',async()=>{const target=$('roles');if(rolesCache)displaySection(target,rolesCache);else target.replaceChildren(el('p','読み込み中…','loading'));$('roles-dialog').showModal();try{const data=await api('/api/roles');const latest=section(data.sections,/役割分担/);if(JSON.stringify(latest)!==JSON.stringify(rolesCache)){rolesCache=latest;displaySection(target,latest);}}catch(error){if(rolesCache)target.append(el('p','最新情報を確認できませんでした。キャッシュを表示中です。','hint'));else errorAt(target,error);}});$('roles-close').addEventListener('click',()=>$('roles-dialog').close());
 let faqTimer;
 async function faqSearch() {
   const query=$('faq-query').value.trim();const category=state.category;const seq=++state.faqSequence;state.limit=4;
