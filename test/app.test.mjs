@@ -62,6 +62,7 @@ test('起動中503は自動再接続し、無応答はタイムアウト後に�
 test('表示行を削減し、トラブル表・緊急連絡先・案内図の順で配置',async()=>{
  assert.deepEqual(displayedMaterialRows.map(([id])=>id),['full','handout','menti','script','faq']);const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8');
  assert.ok(html.indexOf('id="troubles"')<html.indexOf('id="contacts"'));assert.ok(html.indexOf('id="contacts"')<html.indexOf('id="trouble-guides"'));assert.equal(html.includes('id="menti-launch"'),false);assert.match(html,/class="opening-title">柏の葉スマートシティツアー　PlayBook<\/p>/);
+ assert.equal(html.includes('個人端末でログイン状態を保持'),false);assert.equal(html.includes('共有端末ではチェックを外してください'),false);assert.equal(html.includes('id="personal-device"'),false);
 });
 
 test('ダウンロード進捗は実受信量を示し、途中終了は完了扱いにしない',async()=>{

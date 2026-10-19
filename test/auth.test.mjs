@@ -84,6 +84,12 @@ test('認証ルーターは別Originの交換、旧パスワード、不完全�
  assert.equal((await authRoute(new Request('https://api.example/auth/start'),{})).status,503);
  await assert.rejects(authorizeAPI(new Request('https://api.example/api/tours'),{}),e=>e.status===503);
 });
+test('ログイン開始は端末指定にかかわらず最大30日の保持を使う',async()=>{
+ let received;
+ const env={CF_ACCESS_ISSUER:'https://team.cloudflareaccess.com',CF_ACCESS_AUD:'app',CF_ACCESS_MFA_CONFIRMED:'1',AUTH_STORE:{idFromName:()=>'',get:()=>({call:async(action,args)=>{received={action,args};return {ok:true,data:'flow'};}})}};
+ const r=await authRoute(new Request('https://api.example/auth/start?'+new URLSearchParams({challenge:random(),state:random(),personal:'0'})),env);
+ assert.equal(r.status,303);assert.equal(received.action,'start');assert.equal(received.args.flow.personal,true);
+});
 test('認証済みCookieはHttpOnly/Secure、GitHubへ返るのは一度限りのコード',async()=>{
  const f=fixture(),env={APP_URL:'https://furuta-ideas.github.io/TourRuncher/',CF_ACCESS_ISSUER:'https://team.cloudflareaccess.com',CF_ACCESS_AUD:'app',CF_ACCESS_MFA_CONFIRMED:'1',AUTH_STORE:{idFromName:()=>'',get:()=>({call:async(action,args)=>{
   try{return {ok:true,data:action==='start'?f.repo.start(args.flow,args.ip):f.repo.finish(args.flow,null,args.cookie,f.entries)};}catch(e){return {ok:false,status:e.status,error:e.message};}

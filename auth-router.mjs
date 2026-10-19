@@ -44,7 +44,7 @@ export async function authRoute(req,env){
     const ready=env.CF_ACCESS_ISSUER && env.CF_ACCESS_AUD && env.CF_ACCESS_MFA_CONFIRMED==='1' && env.AUTH_STORE;
     if(!ready)throw new AuthError(503,'本人確認の設定が未完了です。管理者に連絡してください。');
     if(path==='/auth/start' && req.method==='GET'){
-      const flow=await store(env,'start',{ip:req.headers.get('CF-Connecting-IP') || 'unknown',flow:{challenge:url.searchParams.get('challenge'),state:url.searchParams.get('state'),personal:url.searchParams.get('personal')==='1'}});
+      const flow=await store(env,'start',{ip:req.headers.get('CF-Connecting-IP') || 'unknown',flow:{challenge:url.searchParams.get('challenge'),state:url.searchParams.get('state'),personal:true}});
       const h=new Headers({...headers,Location:'/auth/continue'}); h.append('Set-Cookie',cookie(FLOW,flow,600));
       return new Response(null,{status:303,headers:h});
     }

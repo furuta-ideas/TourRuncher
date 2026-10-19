@@ -79,14 +79,14 @@ function clearPrivateData(){
 }
 function endSession(message){accessToken='';authExpires=0;sessionExpires=0;clearPrivateData();$('app').hidden=true;$('login').hidden=false;$('login-error').textContent=message;$('login-button').disabled=false;}
 function randomAuth(){const bytes=crypto.getRandomValues(new Uint8Array(32));return btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');}
-async function startLogin(personal=$('personal-device').checked){
+async function startLogin(){
  if(authBusy)return;authBusy=true;$('login-button').disabled=true;$('login-error').textContent='';$('login-status').textContent='本人確認画面を開きます…';
  try{
   const verifier=randomAuth(),state=randomAuth();
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
   const challenge=btoa(String.fromCharCode(...new Uint8Array(digest))).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
-  sessionStorage.setItem('playbook-auth-flow',JSON.stringify({verifier,state,created:Date.now(),personal}));
-  const url=new URL(apiBase+'/auth/start');url.search=new URLSearchParams({challenge,state,personal:personal?'1':'0'});location.assign(url.href);
+  sessionStorage.setItem('playbook-auth-flow',JSON.stringify({verifier,state,created:Date.now()}));
+  const url=new URL(apiBase+'/auth/start');url.search=new URLSearchParams({challenge,state});location.assign(url.href);
  }catch{authBusy=false;$('login-button').disabled=false;$('login-error').textContent='本人確認を開始できません。ブラウザの保存設定を確認して再度お試しください。';}
 }
 async function resumeLogin(){
@@ -100,7 +100,7 @@ async function resumeLogin(){
   if(!response.ok)throw new Error(data.error || '本人確認を完了できません。');
   if(!data.token || data.expires<=Date.now())throw new Error('本人確認を完了できません。');
   accessToken=data.token;authExpires=data.expires;sessionExpires=data.sessionExpires;
-  try{if(flow.personal)localStorage.setItem('playbook-personal','1');else localStorage.removeItem('playbook-personal');}catch{}
+  try{localStorage.setItem('playbook-personal','1');}catch{}
   $('signed-in-email').textContent=data.email;$('login').hidden=true;$('app').hidden=false;tab('prep');load();return true;
  }catch(e){endSession(e.message);return true;}
 }
@@ -115,7 +115,7 @@ async function sessionCheck(){
  if(!accessToken || sessionBusy || document.hidden)return;sessionBusy=true;
  try{
   if(sessionExpires<=Date.now())return endSession('ログインの有効期限が切れました。再度ログインしてください。');
-  if(authExpires-Date.now()<30000){const personal=(()=>{try{return localStorage.getItem('playbook-personal')==='1';}catch{return false;}})();endSession('ログイン状態を確認しています…');await startLogin(personal);return;}
+  if(authExpires-Date.now()<30000){endSession('ログイン状態を確認しています…');await startLogin();return;}
   await api('/auth/session');
  }catch(e){if(accessToken)endSession(e.message);}
  finally{sessionBusy=false;}
@@ -127,7 +127,7 @@ addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
 (async()=>{
  if(location.hash.includes('auth_code=')){$('opening').hidden=true;await resumeLogin();return;}
  await opening();$('login').hidden=false;
- try{if(localStorage.getItem('playbook-personal')==='1')await startLogin(true);}catch{}
+ try{if(localStorage.getItem('playbook-personal')==='1')await startLogin();}catch{}
 })();
 function positionTour(index) {
   const item=$('tour-list').children[index];if(item)$('tour-list').scrollTop=item.offsetTop-($('tour-list').clientHeight-item.offsetHeight)/2;
