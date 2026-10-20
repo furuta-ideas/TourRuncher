@@ -67,7 +67,7 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function opening() {
   await delay(1000);
   $('login').hidden=false;$('login').classList.add('login-over-opening');
-  await delay(3000);
+  await delay(5000);
   $('opening').classList.add('fade');$('login').classList.remove('login-over-opening');
   let manual=false;try{manual=localStorage.getItem(manualLogoutKey)==='1';}catch{}
   if(!manual)startLogin();
