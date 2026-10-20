@@ -64,7 +64,7 @@ test('表示行を削減し、トラブル表・緊急連絡先・案内図の�
  assert.ok(html.indexOf('id="troubles"')<html.indexOf('id="contacts"'));assert.ok(html.indexOf('id="contacts"')<html.indexOf('id="trouble-guides"'));assert.equal(html.includes('id="menti-launch"'),false);assert.match(html,/class="opening-title">柏の葉スマートシティツアー　PlayBook<\/p>/);
  assert.equal(html.includes('個人端末でログイン状態を保持'),false);assert.equal(html.includes('共有端末ではチェックを外してください'),false);assert.equal(html.includes('id="personal-device"'),false);
  assert.match(html,/セキュリティ強化版/);assert.equal(html.includes('id="logout-all"'),false);
- const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');assert.match(app,/await delay\(1000\)[\s\S]*await delay\(3000\)/);assert.match(app,/playbook-require-manual-login/);assert.doesNotMatch(app,/getElementById\('logout-all'\)|\$\('logout-all'\)/);
+ const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');assert.match(app,/await delay\(1000\)[\s\S]*await delay\(5000\)/);assert.match(app,/playbook-require-manual-login/);assert.doesNotMatch(app,/getElementById\('logout-all'\)|\$\('logout-all'\)/);
 });
 
 test('ダウンロード進捗は実受信量を示し、途中終了は完了扱いにしない',async()=>{
